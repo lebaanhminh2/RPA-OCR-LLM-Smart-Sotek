@@ -6,6 +6,7 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
@@ -15,6 +16,10 @@ from app.domain.services.case_service import (
     CaseNotFoundError,
     CaseService,
     DuplicateDocumentTypeError,
+)
+from app.domain.services.document_service import (
+    DocumentNotFoundError,
+    DocumentService,
 )
 
 
@@ -77,6 +82,7 @@ def _store_file(
 
 def create_documents_router(
     case_service: CaseService,
+    document_service: DocumentService,
     upload_root: Path,
 ) -> APIRouter:
     router = APIRouter()
@@ -132,5 +138,20 @@ def create_documents_router(
             ocr_status=document.ocr_status,
             uploaded_at=document.uploaded_at,
         )
+
+    @router.get(
+        "/documents/{document_id}/file",
+        response_class=FileResponse,
+    )
+    def get_document_file(document_id: str) -> FileResponse:
+        try:
+            document = document_service.get_document(document_id)
+        except DocumentNotFoundError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(error),
+            ) from error
+
+        return FileResponse(document.file_path)
 
     return router

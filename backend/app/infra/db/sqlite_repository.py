@@ -104,6 +104,11 @@ class SQLiteRepository(Repository):
             session.refresh(record)
             return _document_to_domain(record)
 
+    def get_document(self, document_id: str) -> Document | None:
+        with self._session_factory() as session:
+            record = session.get(DocumentRecord, document_id)
+            return _document_to_domain(record) if record is not None else None
+
     def list_documents_by_case_id(self, case_id: str) -> list[Document]:
         statement = select(DocumentRecord).where(
             DocumentRecord.case_id == case_id

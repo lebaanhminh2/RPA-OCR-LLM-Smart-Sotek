@@ -61,6 +61,16 @@ class FakeRepository:
         self.documents.append(document)
         return document
 
+    def get_document(self, document_id: str) -> Document | None:
+        return next(
+            (
+                document
+                for document in self.documents
+                if document.id == document_id
+            ),
+            None,
+        )
+
     def list_documents_by_case_id(self, case_id: str) -> list[Document]:
         return [
             document

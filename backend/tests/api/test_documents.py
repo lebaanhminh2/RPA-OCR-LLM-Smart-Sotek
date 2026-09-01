@@ -17,6 +17,7 @@ from app.domain.models import (
     DocumentType,
 )
 from app.domain.services.case_service import CaseService
+from app.domain.services.document_service import DocumentService
 
 ApiFixture = tuple[TestClient, "FakeRepository", Case, Path]
 
@@ -56,6 +57,16 @@ class FakeRepository:
         self.documents.append(document)
         return document
 
+    def get_document(self, document_id: str) -> Document | None:
+        return next(
+            (
+                document
+                for document in self.documents
+                if document.id == document_id
+            ),
+            None,
+        )
+
     def list_documents_by_case_id(self, case_id: str) -> list[Document]:
         return [
             document
@@ -79,11 +90,16 @@ class FakeRepository:
 def api(tmp_path: Path) -> Iterator[ApiFixture]:
     repository = FakeRepository()
     case_service = CaseService(repository)
+    document_service = DocumentService(repository)
     case = case_service.create_case()
     upload_root = tmp_path / "uploads"
     test_app = FastAPI()
     test_app.include_router(
-        create_documents_router(case_service, upload_root)
+        create_documents_router(
+            case_service,
+            document_service,
+            upload_root,
+        )
     )
 
     with TestClient(test_app) as client:
@@ -270,3 +286,51 @@ def test_malformed_pdf_returns_400_without_persisting_or_storing(
     assert response.status_code == 400
     assert repository.documents == []
     assert not upload_root.exists()
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "expected_media_type"),
+    [
+        ("synthetic.pdf", b"synthetic-pdf-bytes", "application/pdf"),
+        ("synthetic.png", b"synthetic-image-bytes", "image/png"),
+    ],
+)
+def test_get_document_file_returns_exact_bytes_and_media_type(
+    api: ApiFixture,
+    filename: str,
+    content: bytes,
+    expected_media_type: str,
+) -> None:
+    client, repository, case, upload_root = api
+    upload_root.mkdir(parents=True, exist_ok=True)
+    stored_path = upload_root / filename
+    stored_path.write_bytes(content)
+    document = Document(
+        id=f"document-{stored_path.suffix[1:]}",
+        case_id=case.id,
+        document_type=DocumentType.CCCD_FRONT,
+        file_path=str(stored_path),
+        page_count=1,
+        ocr_status=DocumentOcrStatus.PENDING,
+        uploaded_at=datetime(2026, 9, 1, 12, 0),
+    )
+    repository.documents.append(document)
+
+    response = client.get(f"/documents/{document.id}/file")
+
+    assert response.status_code == 200
+    assert response.content == content
+    assert response.headers["content-type"] == expected_media_type
+
+
+def test_get_document_file_returns_404_for_unknown_document(
+    api: ApiFixture,
+) -> None:
+    client, _, _, _ = api
+
+    response = client.get("/documents/missing-document/file")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": "Document not found: missing-document"
+    }

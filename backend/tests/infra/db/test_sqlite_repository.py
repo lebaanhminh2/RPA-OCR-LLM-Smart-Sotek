@@ -127,6 +127,36 @@ def test_create_document_round_trips_all_fields_and_domain_enums(
     assert retrieved[0].ocr_status is DocumentOcrStatus.DONE
 
 
+def test_get_document_round_trips_domain_document_and_enums(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    case = make_case("case-001")
+    document = make_document(
+        "document-001",
+        case.id,
+        DocumentType.CCCD_BACK,
+        ocr_status=DocumentOcrStatus.DONE,
+    )
+    repository.create_case(case)
+    repository.create_document(document)
+
+    retrieved = repository.get_document(document.id)
+
+    assert retrieved == document
+    assert retrieved is not None
+    assert retrieved.document_type is DocumentType.CCCD_BACK
+    assert retrieved.ocr_status is DocumentOcrStatus.DONE
+
+
+def test_get_document_returns_none_when_document_does_not_exist(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+
+    assert repository.get_document("missing-document") is None
+
+
 def test_list_documents_only_returns_documents_for_requested_case(
     database: DatabaseFixture,
 ) -> None:

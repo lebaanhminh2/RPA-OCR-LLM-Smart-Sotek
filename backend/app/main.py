@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from app.api.cases import create_cases_router
 from app.api.documents import create_documents_router
 from app.domain.services.case_service import CaseService
+from app.domain.services.document_service import DocumentService
 from app.infra.db.database import (
     SessionFactory,
     engine,
@@ -35,6 +36,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 repository = SQLiteRepository(SessionFactory)
 case_service = CaseService(repository)
+document_service = DocumentService(repository)
 upload_root = Path(__file__).resolve().parents[1] / "uploads"
 
 app = FastAPI(lifespan=lifespan)
@@ -49,7 +51,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(create_cases_router(case_service))
-app.include_router(create_documents_router(case_service, upload_root))
+app.include_router(
+    create_documents_router(case_service, document_service, upload_root)
+)
 
 
 @app.get("/health", response_model=HealthResponse)

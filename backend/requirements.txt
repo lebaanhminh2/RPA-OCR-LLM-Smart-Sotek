@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+pytest
+httpx
+ruff
+mypy
+SQLAlchemy>=2,<3

@@ -5,3 +5,5 @@ httpx
 ruff
 mypy
 SQLAlchemy>=2,<3
+python-multipart
+pypdf

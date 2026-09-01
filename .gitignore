@@ -10,6 +10,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 backend/smart_sotek.db
+backend/uploads/
 
 # Frontend dependencies and build output
 frontend/node_modules/

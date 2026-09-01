@@ -1,11 +1,7 @@
-import { version as pdfjsVersion } from 'pdfjs-dist'
+import { CaseUploadPage } from './pages/CaseUploadPage'
 
 function App() {
-  return (
-    <main data-pdfjs-version={pdfjsVersion}>
-      <h1>Hello</h1>
-    </main>
-  )
+  return <CaseUploadPage />
 }
 
 export default App

@@ -41,3 +41,17 @@ class Document:
     page_count: int
     ocr_status: DocumentOcrStatus
     uploaded_at: datetime
+
+
+@dataclass(frozen=True)
+class OCRBlock:
+    id: str
+    document_id: str
+    page_number: int
+    text: str
+    bbox_x: float
+    bbox_y: float
+    bbox_width: float
+    bbox_height: float
+    confidence: float
+    created_at: datetime

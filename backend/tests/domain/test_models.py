@@ -1,5 +1,7 @@
-from dataclasses import fields
+from dataclasses import FrozenInstanceError, fields
 from datetime import UTC, datetime
+
+import pytest
 
 from app.domain.models import (
     Case,
@@ -7,6 +9,7 @@ from app.domain.models import (
     Document,
     DocumentOcrStatus,
     DocumentType,
+    OCRBlock,
 )
 
 
@@ -62,6 +65,71 @@ def test_document_preserves_supplied_values_and_has_exact_fields() -> None:
         "ocr_status",
         "uploaded_at",
     ]
+
+
+def test_ocr_block_preserves_supplied_values_and_has_exact_fields() -> None:
+    created_at = datetime(2026, 9, 2, 8, 0, tzinfo=UTC)
+
+    ocr_block = OCRBlock(
+        id="ocr-block-1",
+        document_id="document-1",
+        page_number=1,
+        text="NGUYEN VAN A",
+        bbox_x=0.12,
+        bbox_y=0.34,
+        bbox_width=0.30,
+        bbox_height=0.04,
+        confidence=0.97,
+        created_at=created_at,
+    )
+
+    assert ocr_block.id == "ocr-block-1"
+    assert ocr_block.document_id == "document-1"
+    assert ocr_block.page_number == 1
+    assert ocr_block.text == "NGUYEN VAN A"
+    assert ocr_block.bbox_x == 0.12
+    assert ocr_block.bbox_y == 0.34
+    assert ocr_block.bbox_width == 0.30
+    assert ocr_block.bbox_height == 0.04
+    assert ocr_block.confidence == 0.97
+    assert ocr_block.created_at is created_at
+    assert isinstance(ocr_block.page_number, int)
+    assert isinstance(ocr_block.bbox_x, float)
+    assert isinstance(ocr_block.bbox_y, float)
+    assert isinstance(ocr_block.bbox_width, float)
+    assert isinstance(ocr_block.bbox_height, float)
+    assert isinstance(ocr_block.confidence, float)
+    assert not hasattr(ocr_block, "source_id")
+    assert [field.name for field in fields(OCRBlock)] == [
+        "id",
+        "document_id",
+        "page_number",
+        "text",
+        "bbox_x",
+        "bbox_y",
+        "bbox_width",
+        "bbox_height",
+        "confidence",
+        "created_at",
+    ]
+
+
+def test_ocr_block_is_immutable() -> None:
+    ocr_block = OCRBlock(
+        id="ocr-block-1",
+        document_id="document-1",
+        page_number=1,
+        text="NGUYEN VAN A",
+        bbox_x=0.12,
+        bbox_y=0.34,
+        bbox_width=0.30,
+        bbox_height=0.04,
+        confidence=0.97,
+        created_at=datetime(2026, 9, 2, 8, 0, tzinfo=UTC),
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        setattr(ocr_block, "bbox_x", 0.5)
 
 
 def test_case_status_has_exact_names_and_values() -> None:

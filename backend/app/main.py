@@ -20,6 +20,7 @@ from app.infra.db.database import (
 )
 from app.infra.db.orm_models import Base
 from app.infra.db.sqlite_repository import SQLiteRepository
+from app.infra.llm.gemini_extractor import GeminiExtractor
 from app.infra.ocr.local_ocr_adapter import LocalOCRAdapter
 
 _extraction_service: ExtractionService | None = None
@@ -40,6 +41,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         _extraction_service = ExtractionService(
             repository,
             LocalOCRAdapter(),
+            GeminiExtractor(),
         )
         yield
     finally:

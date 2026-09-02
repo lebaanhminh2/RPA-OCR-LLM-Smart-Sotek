@@ -16,8 +16,16 @@ from app.domain.models import (
     Document,
     DocumentOcrStatus,
     DocumentType,
+    ExtractedField,
+    FieldSource,
     OCRBlock,
 )
+from app.domain.ports.llm_provider import (
+    MVP_FIELD_CODES,
+    LLMDocumentInput,
+    LLMExtractedField,
+)
+from app.domain.ports.repository import ExtractedFieldWithSources
 from app.domain.services.case_service import CaseService
 from app.domain.services.document_service import DocumentService
 from app.domain.services.extraction_service import ExtractionService
@@ -35,10 +43,23 @@ class FakeOCRProvider:
         return []
 
 
+class FakeLLMProvider:
+    def extract(
+        self,
+        documents: list[LLMDocumentInput],
+    ) -> list[LLMExtractedField]:
+        return [
+            LLMExtractedField(field_code=code, value=None, source_ids=[])
+            for code in MVP_FIELD_CODES
+        ]
+
+
 class FakeRepository:
     def __init__(self) -> None:
         self.cases: dict[str, Case] = {}
         self.documents: list[Document] = []
+        self.extracted_fields: list[ExtractedField] = []
+        self.field_sources: list[FieldSource] = []
 
     def create_case(self, case: Case) -> Case:
         self.cases[case.id] = case
@@ -118,13 +139,32 @@ class FakeRepository:
     ) -> list[OCRBlock]:
         return []
 
+    def create_extracted_fields(
+        self,
+        fields: list[ExtractedField],
+        sources: list[FieldSource],
+    ) -> tuple[list[ExtractedField], list[FieldSource]]:
+        self.extracted_fields.extend(fields)
+        self.field_sources.extend(sources)
+        return fields, sources
+
+    def list_extracted_fields_with_sources_by_case_id(
+        self,
+        case_id: str,
+    ) -> list[ExtractedFieldWithSources]:
+        return []
+
 
 @pytest.fixture
 def api(tmp_path: Path) -> Iterator[ApiFixture]:
     repository = FakeRepository()
     case_service = CaseService(repository)
     document_service = DocumentService(repository)
-    extraction_service = ExtractionService(repository, FakeOCRProvider())
+    extraction_service = ExtractionService(
+        repository,
+        FakeOCRProvider(),
+        FakeLLMProvider(),
+    )
     case = case_service.create_case()
     upload_root = tmp_path / "uploads"
     test_app = FastAPI()
@@ -256,7 +296,7 @@ def test_duplicate_document_type_returns_409_and_removes_rejected_file(
     assert list(upload_root.iterdir()) == [first_path]
 
 
-def test_four_required_uploads_transition_case_to_processing(
+def test_four_required_uploads_complete_background_extraction(
     api: ApiFixture,
 ) -> None:
     client, repository, case, _ = api
@@ -282,7 +322,8 @@ def test_four_required_uploads_transition_case_to_processing(
         assert response.status_code == 201
 
     assert len(repository.documents) == 4
-    assert repository.cases[case.id].status is CaseStatus.PROCESSING
+    assert repository.cases[case.id].status is CaseStatus.READY_FOR_REVIEW
+    assert len(repository.extracted_fields) == 40
 
 
 def test_fourth_upload_schedules_ocr_without_calling_it_inline(

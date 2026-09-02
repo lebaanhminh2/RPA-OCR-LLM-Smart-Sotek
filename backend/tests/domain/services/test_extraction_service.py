@@ -6,8 +6,16 @@ from app.domain.models import (
     Document,
     DocumentOcrStatus,
     DocumentType,
+    ExtractedField,
+    FieldSource,
     OCRBlock,
 )
+from app.domain.ports.llm_provider import (
+    MVP_FIELD_CODES,
+    LLMDocumentInput,
+    LLMExtractedField,
+)
+from app.domain.ports.repository import ExtractedFieldWithSources
 from app.domain.services.extraction_service import ExtractionService
 
 
@@ -16,6 +24,8 @@ class FakeRepository:
         self.cases = {case.id: case}
         self.documents = {document.id: document for document in documents}
         self.ocr_blocks: list[OCRBlock] = []
+        self.extracted_fields: list[ExtractedField] = []
+        self.field_sources: list[FieldSource] = []
 
     def create_case(self, case: Case) -> Case:
         self.cases[case.id] = case
@@ -86,6 +96,21 @@ class FakeRepository:
             if block.document_id == document_id
         ]
 
+    def create_extracted_fields(
+        self,
+        fields: list[ExtractedField],
+        sources: list[FieldSource],
+    ) -> tuple[list[ExtractedField], list[FieldSource]]:
+        self.extracted_fields.extend(fields)
+        self.field_sources.extend(sources)
+        return fields, sources
+
+    def list_extracted_fields_with_sources_by_case_id(
+        self,
+        case_id: str,
+    ) -> list[ExtractedFieldWithSources]:
+        return []
+
 
 class FakeOCRProvider:
     def __init__(self, failing_document_ids: set[str] | None = None) -> None:
@@ -117,6 +142,44 @@ class FakeOCRProvider:
         ]
 
 
+class FakeLLMProvider:
+    def __init__(
+        self,
+        fields: list[LLMExtractedField] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.fields = fields if fields is not None else make_null_llm_fields()
+        self.error = error
+        self.calls: list[list[LLMDocumentInput]] = []
+
+    def extract(
+        self,
+        documents: list[LLMDocumentInput],
+    ) -> list[LLMExtractedField]:
+        self.calls.append(documents)
+        if self.error is not None:
+            raise self.error
+        return self.fields
+
+
+def make_null_llm_fields() -> list[LLMExtractedField]:
+    return [
+        LLMExtractedField(field_code=code, value=None, source_ids=[])
+        for code in MVP_FIELD_CODES
+    ]
+
+
+def make_llm_fields_with(
+    field: LLMExtractedField,
+) -> list[LLMExtractedField]:
+    return [
+        field
+        if code == field.field_code
+        else LLMExtractedField(field_code=code, value=None, source_ids=[])
+        for code in MVP_FIELD_CODES
+    ]
+
+
 def make_case(status: CaseStatus = CaseStatus.PROCESSING) -> Case:
     created_at = datetime(2026, 9, 2, 7, 0, tzinfo=UTC)
     return Case("case-001", status, created_at, created_at)
@@ -134,7 +197,7 @@ def make_document(document_id: str, document_type: DocumentType) -> Document:
     )
 
 
-def test_process_case_ocr_persists_blocks_and_marks_documents_done() -> None:
+def test_process_case_runs_ocr_llm_and_moves_to_review() -> None:
     case = make_case()
     documents = [
         make_document("front", DocumentType.CCCD_FRONT),
@@ -144,7 +207,16 @@ def test_process_case_ocr_persists_blocks_and_marks_documents_done() -> None:
     ]
     repository = FakeRepository(case, documents)
     ocr_provider = FakeOCRProvider()
-    service = ExtractionService(repository, ocr_provider)
+    llm_provider = FakeLLMProvider(
+        make_llm_fields_with(
+            LLMExtractedField(
+                field_code="ho_ten",
+                value="NGUYỄN VĂN AN",
+                source_ids=["block-front"],
+            )
+        )
+    )
+    service = ExtractionService(repository, ocr_provider, llm_provider)
 
     service.process_case_ocr(case.id)
 
@@ -159,7 +231,21 @@ def test_process_case_ocr_persists_blocks_and_marks_documents_done() -> None:
         document.ocr_status is DocumentOcrStatus.DONE
         for document in repository.documents.values()
     )
-    assert repository.cases[case.id].status is CaseStatus.PROCESSING
+    assert len(llm_provider.calls) == 1
+    llm_documents = llm_provider.calls[0]
+    assert [item.document_type for item in llm_documents] == [
+        document.document_type for document in documents
+    ]
+    assert [item.blocks[0].id for item in llm_documents] == [
+        f"block-{document.id}" for document in documents
+    ]
+    assert len(repository.extracted_fields) == 40
+    by_code = {field.field_code: field for field in repository.extracted_fields}
+    assert by_code["ho_ten"].original_value == "NGUYỄN VĂN AN"
+    assert by_code["email"].original_value is None
+    assert len(repository.field_sources) == 1
+    assert repository.field_sources[0].ocr_block_id == "block-front"
+    assert repository.cases[case.id].status is CaseStatus.READY_FOR_REVIEW
 
 
 def test_process_case_ocr_marks_failure_and_continues_other_documents() -> None:
@@ -168,7 +254,8 @@ def test_process_case_ocr_marks_failure_and_continues_other_documents() -> None:
     successful = make_document("back", DocumentType.CCCD_BACK)
     repository = FakeRepository(case, [failed, successful])
     ocr_provider = FakeOCRProvider({failed.id})
-    service = ExtractionService(repository, ocr_provider)
+    llm_provider = FakeLLMProvider()
+    service = ExtractionService(repository, ocr_provider, llm_provider)
 
     service.process_case_ocr(case.id)
 
@@ -181,6 +268,7 @@ def test_process_case_ocr_marks_failure_and_continues_other_documents() -> None:
         successful.id
     ]
     assert repository.cases[case.id].status is CaseStatus.FAILED
+    assert llm_provider.calls == []
 
 
 def test_process_case_ocr_is_noop_until_case_is_processing() -> None:
@@ -188,7 +276,8 @@ def test_process_case_ocr_is_noop_until_case_is_processing() -> None:
     document = make_document("front", DocumentType.CCCD_FRONT)
     repository = FakeRepository(case, [document])
     ocr_provider = FakeOCRProvider()
-    service = ExtractionService(repository, ocr_provider)
+    llm_provider = FakeLLMProvider()
+    service = ExtractionService(repository, ocr_provider, llm_provider)
 
     assert not service.is_case_ready_for_ocr(case.id)
     assert not service.is_case_ready_for_ocr("missing-case")
@@ -196,5 +285,107 @@ def test_process_case_ocr_is_noop_until_case_is_processing() -> None:
     service.process_case_ocr(case.id)
 
     assert ocr_provider.calls == []
+    assert llm_provider.calls == []
     assert repository.ocr_blocks == []
     assert document.ocr_status is DocumentOcrStatus.PENDING
+
+
+def test_invalid_source_becomes_blank_field_without_failing_case() -> None:
+    case = make_case()
+    documents = [
+        make_document("front", DocumentType.CCCD_FRONT),
+        make_document("back", DocumentType.CCCD_BACK),
+        make_document("application", DocumentType.LOAN_APPLICATION),
+        make_document("contract", DocumentType.LABOR_CONTRACT),
+    ]
+    repository = FakeRepository(case, documents)
+    llm_provider = FakeLLMProvider(
+        make_llm_fields_with(
+            LLMExtractedField(
+                field_code="ho_ten",
+                value="GIÁ TRỊ KHÔNG CÓ BẰNG CHỨNG",
+                source_ids=["invented-source"],
+            )
+        )
+    )
+    service = ExtractionService(
+        repository,
+        FakeOCRProvider(),
+        llm_provider,
+    )
+
+    service.process_case_ocr(case.id)
+
+    by_code = {field.field_code: field for field in repository.extracted_fields}
+    assert len(by_code) == 40
+    assert by_code["ho_ten"].original_value is None
+    assert by_code["ho_ten"].current_value is None
+    assert repository.field_sources == []
+    assert repository.cases[case.id].status is CaseStatus.READY_FOR_REVIEW
+
+
+def test_missing_and_duplicate_outputs_still_create_40_blankable_fields() -> None:
+    case = make_case()
+    documents = [
+        make_document("front", DocumentType.CCCD_FRONT),
+        make_document("back", DocumentType.CCCD_BACK),
+        make_document("application", DocumentType.LOAN_APPLICATION),
+        make_document("contract", DocumentType.LABOR_CONTRACT),
+    ]
+    repository = FakeRepository(case, documents)
+    llm_provider = FakeLLMProvider(
+        [
+            LLMExtractedField(
+                field_code="ho_ten",
+                value="NGUYỄN VĂN AN",
+                source_ids=["block-front"],
+            ),
+            LLMExtractedField(
+                field_code="ho_ten",
+                value="TRÙNG LẶP",
+                source_ids=["block-front"],
+            ),
+            LLMExtractedField(
+                field_code="unsupported_field",
+                value="BỎ QUA",
+                source_ids=["block-front"],
+            ),
+        ]
+    )
+    service = ExtractionService(
+        repository,
+        FakeOCRProvider(),
+        llm_provider,
+    )
+
+    service.process_case_ocr(case.id)
+
+    assert len(repository.extracted_fields) == 40
+    assert all(
+        field.original_value is None for field in repository.extracted_fields
+    )
+    assert repository.cases[case.id].status is CaseStatus.READY_FOR_REVIEW
+
+
+def test_llm_failure_marks_case_failed_without_persisting_fields() -> None:
+    case = make_case()
+    documents = [
+        make_document("front", DocumentType.CCCD_FRONT),
+        make_document("back", DocumentType.CCCD_BACK),
+        make_document("application", DocumentType.LOAN_APPLICATION),
+        make_document("contract", DocumentType.LABOR_CONTRACT),
+    ]
+    repository = FakeRepository(case, documents)
+    llm_provider = FakeLLMProvider(error=RuntimeError("synthetic LLM failure"))
+    service = ExtractionService(
+        repository,
+        FakeOCRProvider(),
+        llm_provider,
+    )
+
+    service.process_case_ocr(case.id)
+
+    assert len(llm_provider.calls) == 1
+    assert repository.extracted_fields == []
+    assert repository.field_sources == []
+    assert repository.cases[case.id].status is CaseStatus.FAILED

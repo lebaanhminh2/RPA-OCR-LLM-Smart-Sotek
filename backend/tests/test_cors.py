@@ -2,6 +2,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.domain.models import DocumentType, OCRBlock
+from app.domain.ports.llm_provider import (
+    MVP_FIELD_CODES,
+    LLMDocumentInput,
+    LLMExtractedField,
+)
 from app.main import app
 
 
@@ -15,11 +20,26 @@ class FakeOCRProvider:
         return []
 
 
+class FakeLLMProvider:
+    def extract(
+        self,
+        documents: list[LLMDocumentInput],
+    ) -> list[LLMExtractedField]:
+        return [
+            LLMExtractedField(field_code=code, value=None, source_ids=[])
+            for code in MVP_FIELD_CODES
+        ]
+
+
 @pytest.fixture(autouse=True)
 def use_fake_ocr_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "app.main.LocalOCRAdapter",
         lambda: FakeOCRProvider(),
+    )
+    monkeypatch.setattr(
+        "app.main.GeminiExtractor",
+        lambda: FakeLLMProvider(),
     )
 
 

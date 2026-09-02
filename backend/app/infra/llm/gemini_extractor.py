@@ -10,54 +10,13 @@ from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from app.domain.models import OCRBlock
 from app.domain.ports.llm_provider import (
+    MVP_FIELD_CODES,
     LLMDocumentInput,
     LLMExtractedField,
     LLMProvider,
 )
 
 GEMINI_MODEL = "gemini-3.7-flash"
-FIELD_CODES = (
-    "ho_ten",
-    "gioi_tinh",
-    "ngay_sinh",
-    "so_cccd",
-    "ngay_cap_cccd",
-    "co_quan_cap_cccd",
-    "so_dien_thoai_di_dong",
-    "email",
-    "tinh_trang_hon_nhan",
-    "trinh_do_hoc_van",
-    "hinh_thuc_so_huu_nha",
-    "dia_chi_thuong_tru",
-    "dia_chi_hien_tai",
-    "thoi_gian_cu_tru_hien_tai",
-    "so_tien_vay_de_nghi",
-    "so_tien_vay_de_nghi_bang_chu",
-    "ngay_lam_don",
-    "ky_han_vay",
-    "muc_dich_vay",
-    "chi_tiet_muc_dich_vay_khac",
-    "phuong_thuc_giai_ngan",
-    "loai_tai_khoan_nhan_giai_ngan",
-    "ngan_hang_nhan_giai_ngan",
-    "chi_nhanh_nhan_giai_ngan",
-    "so_tai_khoan_nhan_giai_ngan",
-    "ten_chu_tai_khoan_nhan_giai_ngan",
-    "nghe_nghiep_chuyen_mon",
-    "ten_don_vi_cong_tac",
-    "ma_so_thue_cong_ty",
-    "dia_chi_cong_ty",
-    "dien_thoai_cong_ty",
-    "chuc_vu",
-    "loai_hop_dong_lao_dong",
-    "ngay_bat_dau_lam_viec",
-    "ngay_nhan_luong_hang_thang",
-    "muc_luong_gross",
-    "thu_nhap_thuc_lanh_hang_thang",
-    "chi_phi_sinh_hoat_hang_thang",
-    "hinh_thuc_nhan_luong",
-    "so_nguoi_phu_thuoc",
-)
 
 _SYSTEM_INSTRUCTION = """
 Bạn trích xuất dữ liệu thô từ OCR của hồ sơ vay theo lương.
@@ -95,19 +54,6 @@ class GeminiFieldOutput(BaseModel):
     value: str | None
     source_ids: list[str]
 
-    @model_validator(mode="after")
-    def validate_value_and_sources(self) -> Self:
-        if self.value is None:
-            if self.source_ids:
-                raise ValueError("A null value must have no source_ids")
-            return self
-
-        if not self.value.strip():
-            raise ValueError("A non-null value must not be blank")
-        if not self.source_ids:
-            raise ValueError("A non-null value must have at least one source_id")
-        return self
-
 
 class GeminiExtractionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -120,7 +66,7 @@ class GeminiExtractionResponse(BaseModel):
         if len(returned_codes) != len(set(returned_codes)):
             raise ValueError("Duplicate field_code in Gemini response")
 
-        expected = set(FIELD_CODES)
+        expected = set(MVP_FIELD_CODES)
         returned = set(returned_codes)
         if returned != expected:
             missing = sorted(expected - returned)
@@ -173,7 +119,7 @@ class GeminiExtractor(LLMProvider):
         self,
         documents: list[LLMDocumentInput],
     ) -> list[LLMExtractedField]:
-        source_ids = self._validate_and_collect_source_ids(documents)
+        self._validate_documents(documents)
         prompt = self._build_prompt(documents)
         response = self._generate_with_retry(prompt)
 
@@ -185,14 +131,6 @@ class GeminiExtractor(LLMProvider):
         except ValidationError as exc:
             raise GeminiResponseError("Gemini returned an invalid response") from exc
 
-        for field in parsed.fields:
-            invalid_source_ids = set(field.source_ids) - source_ids
-            if invalid_source_ids:
-                raise GeminiResponseError(
-                    "Gemini returned source_ids that were not present in the input: "
-                    f"{sorted(invalid_source_ids)}"
-                )
-
         fields_by_code = {field.field_code: field for field in parsed.fields}
         return [
             LLMExtractedField(
@@ -200,7 +138,7 @@ class GeminiExtractor(LLMProvider):
                 value=fields_by_code[field_code].value,
                 source_ids=fields_by_code[field_code].source_ids,
             )
-            for field_code in FIELD_CODES
+            for field_code in MVP_FIELD_CODES
         ]
 
     def _generate_with_retry(self, prompt: str) -> types.GenerateContentResponse:
@@ -232,9 +170,9 @@ class GeminiExtractor(LLMProvider):
         raise AssertionError("Retry loop exited unexpectedly")
 
     @staticmethod
-    def _validate_and_collect_source_ids(
+    def _validate_documents(
         documents: list[LLMDocumentInput],
-    ) -> set[str]:
+    ) -> None:
         source_ids: set[str] = set()
         for document in documents:
             for block in document.blocks:
@@ -246,17 +184,19 @@ class GeminiExtractor(LLMProvider):
                 if block.id in source_ids:
                     raise ValueError(f"Duplicate OCR source ID: {block.id}")
                 source_ids.add(block.id)
-        return source_ids
 
     @staticmethod
     def _build_prompt(documents: list[LLMDocumentInput]) -> str:
         payload = {
-            "required_field_codes": list(FIELD_CODES),
+            "required_field_codes": list(MVP_FIELD_CODES),
             "documents": [
                 {
                     "document_id": document.document_id,
                     "document_type": document.document_type.value,
-                    "blocks": [GeminiExtractor._serialize_block(block) for block in document.blocks],
+                    "blocks": [
+                        GeminiExtractor._serialize_block(block)
+                        for block in document.blocks
+                    ],
                 }
                 for document in documents
             ],

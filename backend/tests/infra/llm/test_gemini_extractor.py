@@ -6,9 +6,8 @@ import pytest
 from google.genai import errors, types
 
 from app.domain.models import DocumentType, OCRBlock, OCRBlockKind
-from app.domain.ports.llm_provider import LLMDocumentInput
+from app.domain.ports.llm_provider import MVP_FIELD_CODES, LLMDocumentInput
 from app.infra.llm.gemini_extractor import (
-    FIELD_CODES,
     GEMINI_MODEL,
     GeminiConfigurationError,
     GeminiExtractor,
@@ -95,7 +94,7 @@ def _response_json(
                     "value": values.get(field_code, (None, []))[0],
                     "source_ids": values.get(field_code, (None, []))[1],
                 }
-                for field_code in FIELD_CODES
+                for field_code in MVP_FIELD_CODES
             ]
         },
         ensure_ascii=False,
@@ -121,7 +120,7 @@ def test_extract_uses_document_aware_prompt_and_structured_output() -> None:
     result = extractor.extract(_documents())
 
     assert len(result) == 40
-    assert [field.field_code for field in result] == list(FIELD_CODES)
+    assert [field.field_code for field in result] == list(MVP_FIELD_CODES)
     assert result[0].value == "NGUYỄN VĂN AN"
     assert result[0].source_ids == ["source-ho-ten"]
 
@@ -152,24 +151,30 @@ def test_extract_rejects_incomplete_field_catalog() -> None:
         extractor.extract(_documents())
 
 
-def test_extract_rejects_value_without_source() -> None:
+def test_extract_preserves_value_without_source_for_domain_validation() -> None:
     generate_content = FakeGenerateContent(
         [_response_json({"ho_ten": ("NGUYỄN VĂN AN", [])})]
     )
     extractor = GeminiExtractor(generate_content=generate_content)
 
-    with pytest.raises(GeminiResponseError):
-        extractor.extract(_documents())
+    result = extractor.extract(_documents())
+
+    assert result[0].field_code == "ho_ten"
+    assert result[0].value == "NGUYỄN VĂN AN"
+    assert result[0].source_ids == []
 
 
-def test_extract_rejects_invented_source_id() -> None:
+def test_extract_preserves_invented_source_id_for_domain_validation() -> None:
     generate_content = FakeGenerateContent(
         [_response_json({"ho_ten": ("NGUYỄN VĂN AN", ["invented-id"])})]
     )
     extractor = GeminiExtractor(generate_content=generate_content)
 
-    with pytest.raises(GeminiResponseError, match="not present"):
-        extractor.extract(_documents())
+    result = extractor.extract(_documents())
+
+    assert result[0].field_code == "ho_ten"
+    assert result[0].value == "NGUYỄN VĂN AN"
+    assert result[0].source_ids == ["invented-id"]
 
 
 def test_rate_limit_retries_with_finite_exponential_backoff() -> None:

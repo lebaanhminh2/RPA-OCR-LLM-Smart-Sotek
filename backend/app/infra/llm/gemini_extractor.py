@@ -32,7 +32,11 @@ Quy tắc bắt buộc:
   checkbox khác từ TEXT hoặc từ lựa chọn không xuất hiện.
 - muc_dich_vay có nhiều lựa chọn thì value là JSON array đã serialize thành chuỗi,
   ví dụ [\"Sửa nhà\",\"Học tập\"].
-- Không chuẩn hoá hoặc suy diễn ngoài nội dung tài liệu.
+- Với so_tien_vay_de_nghi, muc_luong_gross, thu_nhap_thuc_lanh_hang_thang và
+  chi_phi_sinh_hoat_hang_thang: chỉ trả số tiền VND với dấu chấm phân cách hàng
+  nghìn, không kèm đơn vị hoặc mô tả, ví dụ 15.000.000. Không tìm thấy số tiền
+  chắc chắn thì trả null.
+- Không chuẩn hoá các field khác hoặc suy diễn ngoài nội dung tài liệu.
 """.strip()
 
 _SOURCE_GROUNDING_INSTRUCTION = """

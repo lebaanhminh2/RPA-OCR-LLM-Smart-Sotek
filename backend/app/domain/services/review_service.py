@@ -16,6 +16,7 @@ from app.domain.ports.repository import (
     ReviewRepository,
 )
 from app.domain.services.case_service import CaseNotFoundError
+from app.domain.services.field_value_normalizer import normalize_field_value
 
 
 class CaseNotReadyForReviewError(Exception):
@@ -96,6 +97,7 @@ class ReviewService:
         if field is None or field.case_id != case.id:
             raise ExtractedFieldNotFoundError(case_id, extracted_field_id)
 
+        normalized_value = normalize_field_value(field.field_code, current_value)
         updated_at = self._clock()
         action = ReviewAction(
             id=self._id_factory(),
@@ -103,12 +105,12 @@ class ReviewService:
             extracted_field_id=field.id,
             action_type=ReviewActionType.EDIT_FIELD,
             previous_value=field.current_value,
-            new_value=current_value,
+            new_value=normalized_value,
             created_at=updated_at,
         )
         result = self._repository.update_extracted_field_with_action(
             field.id,
-            current_value,
+            normalized_value,
             updated_at,
             action,
         )

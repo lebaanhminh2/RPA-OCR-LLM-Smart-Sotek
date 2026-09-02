@@ -1,8 +1,8 @@
 # EXTRACTION_SCHEMA.md
 
 > Source of truth cho danh mục trường M4. Tài liệu này chỉ mô tả dữ liệu trích
-> xuất thô từ 4 loại tài liệu MVP; không mô tả BPM mapping, chuẩn hoá nghiệp vụ,
-> suy diễn hay đối chiếu chéo tài liệu.
+> xuất từ 4 loại tài liệu MVP; không mô tả BPM mapping, suy diễn hay đối chiếu
+> chéo tài liệu. Ngoại lệ duy nhất là định dạng canonical cho bốn trường tiền.
 
 ## 1. Phạm vi
 
@@ -12,8 +12,8 @@
   hỗ trợ upload DOCX.
 - M4 tạo đúng một `ExtractedField` cho mỗi `field_code` dưới đây trong một
   `Case`, kể cả khi không tìm thấy giá trị.
-- Tất cả giá trị M4 dùng kiểu `string | null`. Chuẩn hoá tiền tệ, ngày tháng,
-  địa chỉ hoặc enum BPM nằm ngoài M4.
+- Tất cả giá trị M4 dùng kiểu `string | null`. Bốn trường tiền được chuẩn hoá
+  định dạng theo §2; chuẩn hoá ngày tháng, địa chỉ hoặc enum BPM nằm ngoài M4.
 - Không dùng tài liệu khách hàng thật trong test Gemini, smoke test hoặc dữ
   liệu demo. Chỉ dùng dữ liệu synthetic.
 
@@ -34,6 +34,14 @@
 - Mọi `field_code` ngoài catalog này đều bị từ chối.
 - Các giá trị từ checkbox được local OMR chuẩn hoá thành evidence block trước
   khi gửi LLM; Gemini không tự suy đoán dấu tick từ text OCR.
+- `so_tien_vay_de_nghi`, `muc_luong_gross`,
+  `thu_nhap_thuc_lanh_hang_thang` và `chi_phi_sinh_hoat_hang_thang` dùng chuỗi
+  số nguyên VND với dấu chấm phân cách hàng nghìn, không kèm đơn vị hoặc mô tả;
+  ví dụ `15000000`, `15 triệu` và `15.000.000 VNĐ` đều thành `15.000.000`.
+  Backend áp dụng quy tắc này cho cả kết quả Gemini và giá trị chuyên viên sửa.
+  Nếu kết quả Gemini không thể chuẩn hoá chắc chắn, field đó để `null` để chuyên
+  viên nhập lại; không suy đoán. Quy tắc không áp dụng cho CCCD, số điện thoại,
+  mã số thuế, số tài khoản hoặc trường số tiền bằng chữ.
 
 ## 3. Core 40 field catalog
 
@@ -60,7 +68,7 @@
 
 | field_code | Nhãn tiếng Việt | Type | Nguồn dự kiến | Cách lấy |
 |---|---|---|---|---|
-| `so_tien_vay_de_nghi` | Số tiền vay đề nghị bằng số | `string \| null` | `LOAN_APPLICATION` | Text |
+| `so_tien_vay_de_nghi` | Số tiền vay đề nghị bằng số | `string \| null` | `LOAN_APPLICATION` | Text; chuẩn hoá tiền theo §2 |
 | `so_tien_vay_de_nghi_bang_chu` | Số tiền vay đề nghị bằng chữ | `string \| null` | `LOAN_APPLICATION` | Text |
 | `ngay_lam_don` | Ngày làm đơn | `string \| null` | `LOAN_APPLICATION` | Text |
 | `ky_han_vay` | Kỳ hạn vay đề nghị | `string \| null` | `LOAN_APPLICATION` | Single-choice checkbox |
@@ -86,14 +94,14 @@
 | `loai_hop_dong_lao_dong` | Loại hợp đồng lao động | `string \| null` | `LOAN_APPLICATION`, `LABOR_CONTRACT` | Text hoặc single-choice checkbox |
 | `ngay_bat_dau_lam_viec` | Ngày bắt đầu làm việc | `string \| null` | `LOAN_APPLICATION`, `LABOR_CONTRACT` | Text |
 | `ngay_nhan_luong_hang_thang` | Ngày nhận lương hàng tháng | `string \| null` | `LOAN_APPLICATION`, `LABOR_CONTRACT` | Text |
-| `muc_luong_gross` | Mức lương gross | `string \| null` | `LABOR_CONTRACT` | Text |
+| `muc_luong_gross` | Mức lương gross | `string \| null` | `LABOR_CONTRACT` | Text; chuẩn hoá tiền theo §2 |
 
 ### 3.4 Tài chính (4)
 
 | field_code | Nhãn tiếng Việt | Type | Nguồn dự kiến | Cách lấy |
 |---|---|---|---|---|
-| `thu_nhap_thuc_lanh_hang_thang` | Thu nhập thực lãnh hàng tháng | `string \| null` | `LOAN_APPLICATION` | Text |
-| `chi_phi_sinh_hoat_hang_thang` | Chi phí sinh hoạt hàng tháng | `string \| null` | `LOAN_APPLICATION` | Text |
+| `thu_nhap_thuc_lanh_hang_thang` | Thu nhập thực lãnh hàng tháng | `string \| null` | `LOAN_APPLICATION` | Text; chuẩn hoá tiền theo §2 |
+| `chi_phi_sinh_hoat_hang_thang` | Chi phí sinh hoạt hàng tháng | `string \| null` | `LOAN_APPLICATION` | Text; chuẩn hoá tiền theo §2 |
 | `hinh_thuc_nhan_luong` | Hình thức nhận lương | `string \| null` | `LOAN_APPLICATION`, `LABOR_CONTRACT` | Text hoặc single-choice checkbox |
 | `so_nguoi_phu_thuoc` | Số người phụ thuộc tài chính | `string \| null` | `LOAN_APPLICATION` | Text |
 

@@ -260,6 +260,59 @@ def test_process_case_runs_ocr_llm_and_moves_to_review() -> None:
     assert repository.cases[case.id].status is CaseStatus.READY_FOR_REVIEW
 
 
+def test_process_case_normalizes_monetary_fields_before_persisting() -> None:
+    case = make_case()
+    documents = [
+        make_document("application", DocumentType.LOAN_APPLICATION),
+        make_document("contract", DocumentType.LABOR_CONTRACT),
+    ]
+    repository = FakeRepository(case, documents)
+    llm_provider = FakeLLMProvider(
+        make_llm_fields_with(
+            LLMExtractedField(
+                field_code="so_tien_vay_de_nghi",
+                value="15 triệu",
+                source_ids=["block-application"],
+            ),
+            LLMExtractedField(
+                field_code="muc_luong_gross",
+                value="40.000.000 VNĐ/tháng (gross)",
+                source_ids=["block-contract"],
+            ),
+        )
+    )
+    service = ExtractionService(repository, FakeOCRProvider(), llm_provider)
+
+    service.process_case_ocr(case.id)
+
+    by_code = {field.field_code: field for field in repository.extracted_fields}
+    assert by_code["so_tien_vay_de_nghi"].current_value == "15.000.000"
+    assert by_code["muc_luong_gross"].current_value == "40.000.000"
+
+
+def test_unparseable_monetary_field_becomes_blank_without_failing_case() -> None:
+    case = make_case()
+    document = make_document("contract", DocumentType.LABOR_CONTRACT)
+    repository = FakeRepository(case, [document])
+    llm_provider = FakeLLMProvider(
+        make_llm_fields_with(
+            LLMExtractedField(
+                field_code="muc_luong_gross",
+                value="không rõ",
+                source_ids=["block-contract"],
+            )
+        )
+    )
+    service = ExtractionService(repository, FakeOCRProvider(), llm_provider)
+
+    service.process_case_ocr(case.id)
+
+    by_code = {field.field_code: field for field in repository.extracted_fields}
+    assert by_code["muc_luong_gross"].current_value is None
+    assert repository.field_sources == []
+    assert repository.cases[case.id].status is CaseStatus.READY_FOR_REVIEW
+
+
 def test_process_case_ocr_marks_failure_and_continues_other_documents() -> None:
     case = make_case()
     failed = make_document("front", DocumentType.CCCD_FRONT)

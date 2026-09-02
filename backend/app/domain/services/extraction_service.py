@@ -20,6 +20,7 @@ from app.domain.ports.llm_provider import (
 )
 from app.domain.ports.ocr_provider import OCRProvider
 from app.domain.ports.repository import ExtractionRepository
+from app.domain.services.field_value_normalizer import normalize_field_value
 
 
 class ExtractionService:
@@ -223,7 +224,10 @@ class ExtractionService:
             for source_id in source_ids
         ):
             return None, []
-        return field.value, source_ids
+        normalized_value = normalize_field_value(field.field_code, field.value)
+        if normalized_value is None:
+            return None, []
+        return normalized_value, source_ids
 
     def _mark_case_failed(self, case_id: str) -> None:
         updated_case = self._repository.update_case_status(

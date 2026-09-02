@@ -301,6 +301,29 @@ def test_update_field_preserves_original_and_audits_every_edit() -> None:
     ]
 
 
+def test_update_field_normalizes_monetary_value_and_audits_canonical_value() -> None:
+    timestamp = datetime(2026, 9, 2, 11, 0, tzinfo=UTC)
+    repository = FakeRepository(
+        make_case(CaseStatus.READY_FOR_REVIEW),
+        [make_review_field("muc_luong_gross", "40.000.000")],
+    )
+    service = ReviewService(
+        repository,
+        clock=lambda: timestamp,
+        id_factory=lambda: "action-money",
+    )
+
+    updated = service.update_field(
+        "case-001",
+        "field-muc_luong_gross",
+        "15 triệu",
+    )
+
+    assert updated.current_value == "15.000.000"
+    assert repository.actions[0].previous_value == "40.000.000"
+    assert repository.actions[0].new_value == "15.000.000"
+
+
 def test_update_field_rejects_missing_or_cross_case_field() -> None:
     repository = FakeRepository(
         make_case(CaseStatus.READY_FOR_REVIEW),

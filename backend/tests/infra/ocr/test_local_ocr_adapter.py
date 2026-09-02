@@ -184,16 +184,21 @@ def test_model_loaders_are_called_once_during_initialization(
 def test_paddle_loader_uses_local_model_directory_and_cpu(tmp_path: Path) -> None:
     model_dir = (tmp_path / "paddle").resolve()
     detector = FakeDetector()
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, str, bool]] = []
 
-    def factory(*, model_dir: str, device: str) -> object:
-        calls.append((model_dir, device))
+    def factory(
+        *,
+        model_dir: str,
+        device: str,
+        enable_mkldnn: bool,
+    ) -> object:
+        calls.append((model_dir, device, enable_mkldnn))
         return detector
 
     loaded = ocr._load_detector(model_dir, factory=factory)
 
     assert loaded is detector
-    assert calls == [(str(model_dir), "cpu")]
+    assert calls == [(str(model_dir), "cpu", False)]
 
 
 def test_vietocr_loader_forces_local_cpu_configuration(tmp_path: Path) -> None:
@@ -231,6 +236,28 @@ def test_vietocr_loader_forces_local_cpu_configuration(tmp_path: Path) -> None:
     assert config["device"] == "cpu"
     assert config["cnn"] == {"pretrained": False}
     assert config["predictor"] == {"beamsearch": False}
+
+
+def test_vietocr_loader_restores_removed_pillow_resampling_alias(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = (tmp_path / "config.yml").resolve()
+    weights_path = (tmp_path / "weights.pth").resolve()
+    config: dict[str, object] = {
+        "cnn": {"pretrained": True},
+        "predictor": {"beamsearch": True},
+    }
+    monkeypatch.delattr(Image, "ANTIALIAS", raising=False)
+
+    ocr._load_recognizer(
+        config_path,
+        weights_path,
+        config_loader=lambda _: config,
+        predictor_factory=lambda _: FakeRecognizer(),
+    )
+
+    assert getattr(Image, "ANTIALIAS") is Image.Resampling.LANCZOS
 
 
 def test_repeated_image_extract_reuses_models_and_maps_evidence(

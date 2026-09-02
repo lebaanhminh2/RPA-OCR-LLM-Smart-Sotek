@@ -56,7 +56,13 @@ class _Recognizer(Protocol):
 
 
 class _DetectorFactory(Protocol):
-    def __call__(self, *, model_dir: str, device: str) -> object: ...
+    def __call__(
+        self,
+        *,
+        model_dir: str,
+        device: str,
+        enable_mkldnn: bool,
+    ) -> object: ...
 
 
 class _PredictorFactory(Protocol):
@@ -64,6 +70,12 @@ class _PredictorFactory(Protocol):
 
 
 ConfigLoader = Callable[[str], MutableMapping[str, object]]
+
+
+def _ensure_vietocr_pillow_compatibility() -> None:
+    # VietOCR 0.3.12 still uses the alias removed by Pillow 10.
+    if not hasattr(Image, "ANTIALIAS"):
+        setattr(Image, "ANTIALIAS", Image.Resampling.LANCZOS)
 
 
 def _load_detector(
@@ -76,7 +88,13 @@ def _load_detector(
         factory = cast(_DetectorFactory, TextDetection)
 
     try:
-        detector = factory(model_dir=str(model_dir), device="cpu")
+        # PaddlePaddle 3.3.1 cannot execute this static model through oneDNN on
+        # Windows, while the standard CPU inference engine supports it.
+        detector = factory(
+            model_dir=str(model_dir),
+            device="cpu",
+            enable_mkldnn=False,
+        )
     except Exception as error:
         raise OCRConfigurationError(
             f"Unable to initialize Paddle text detection from {model_dir}."
@@ -90,6 +108,7 @@ def _load_recognizer(
     config_loader: ConfigLoader | None = None,
     predictor_factory: _PredictorFactory | None = None,
 ) -> _Recognizer:
+    _ensure_vietocr_pillow_compatibility()
     if config_loader is None or predictor_factory is None:
         from vietocr.tool.config import Cfg  # type: ignore[import-untyped]
         from vietocr.tool.predictor import Predictor  # type: ignore[import-untyped]

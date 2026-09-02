@@ -52,6 +52,10 @@
   outline: 2px solid rgb(24 89 201 / 15%);
 }
 
+.field-item__input[aria-invalid='true'] {
+  border-color: #c34848;
+}
+
 .field-item__input:disabled {
   color: #536174;
   background: #f3f5f8;

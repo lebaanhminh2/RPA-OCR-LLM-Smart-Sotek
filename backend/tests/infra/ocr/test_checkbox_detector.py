@@ -9,6 +9,7 @@ from PIL import Image  # type: ignore[import-untyped]
 
 from app.domain.models import OCRBlockKind
 from app.infra.ocr.checkbox_detector import (
+    AlignmentResult,
     CheckboxState,
     CheckboxThresholds,
     TemplateCheckboxDetector,
@@ -206,6 +207,27 @@ def test_classifier_handles_uneven_dark_paper_and_print_through() -> None:
     )
 
 
+def test_classifier_rejects_dense_axis_aligned_artifact() -> None:
+    box = NormalizedBox(0.40, 0.40, 0.12, 0.12)
+    reference = np.full((100, 100), 255, dtype=np.uint8)
+    x, y, width, height = _draw_empty_box(reference, box)
+    observed = reference.copy()
+    cv2.line(
+        observed,
+        (x + width // 2 - 1, y + height // 4),
+        (x + width // 2 - 1, y + height - height // 4),
+        (0,),
+        3,
+    )
+
+    assert classify_checkbox(
+        observed,
+        reference,
+        box,
+        CheckboxThresholds(),
+    )[0] is CheckboxState.UNCHECKED
+
+
 def test_page_saturation_guard_fails_closed() -> None:
     option = CheckboxOption(
         "option",
@@ -259,6 +281,70 @@ def test_single_choice_conflict_emits_no_selection() -> None:
         blocks = detector.detect_page("document-1", 1, image)
 
     assert blocks == []
+
+
+def test_single_choice_keeps_one_checked_when_another_option_is_uncertain() -> None:
+    template, reference, first, second = _synthetic_template()
+    detector = TemplateCheckboxDetector(template, {1: reference})
+    group = template.pages[0].groups[0]
+    alignment = AlignmentResult(reference, np.eye(3), 1.0)
+
+    blocks = detector._group_blocks(
+        "document-1",
+        1,
+        group,
+        reference,
+        reference,
+        alignment,
+        [
+            (first, CheckboxState.CHECKED, 1.0, (0, 0)),
+            (second, CheckboxState.UNCERTAIN, 0.0, (0, 0)),
+        ],
+    )
+
+    assert [block.text for block in blocks] == [
+        "field_code=ky_han_vay;option=12 tháng"
+    ]
+
+
+def test_multi_choice_keeps_confirmed_mark_when_another_option_is_uncertain() -> None:
+    single_template, reference, first, second = _synthetic_template()
+    page = single_template.pages[0]
+    multi_template = CheckboxTemplate(
+        "synthetic-multi-v1",
+        (
+            CheckboxTemplatePage(
+                page.page_number,
+                (
+                    CheckboxGroup(
+                        "muc_dich_vay",
+                        ChoiceMode.MULTI,
+                        (first, second),
+                    ),
+                ),
+            ),
+        ),
+    )
+    detector = TemplateCheckboxDetector(multi_template, {1: reference})
+    group = multi_template.pages[0].groups[0]
+    alignment = AlignmentResult(reference, np.eye(3), 1.0)
+
+    blocks = detector._group_blocks(
+        "document-1",
+        1,
+        group,
+        reference,
+        reference,
+        alignment,
+        [
+            (first, CheckboxState.CHECKED, 1.0, (0, 0)),
+            (second, CheckboxState.UNCERTAIN, 0.0, (0, 0)),
+        ],
+    )
+
+    assert [block.text for block in blocks] == [
+        "field_code=muc_dich_vay;option=12 tháng"
+    ]
 
 
 def test_marker_alignment_uses_configured_marker_ids() -> None:

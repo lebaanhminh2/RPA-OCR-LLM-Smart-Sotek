@@ -1,6 +1,11 @@
 import { useState, type KeyboardEvent } from 'react'
 
 import type { ReviewField } from '../../types/api'
+import {
+  getFieldValidationMessage,
+  toFieldDraftValue,
+  toPersistedFieldValue,
+} from './fieldValuePresentation'
 import './FieldItem.css'
 
 type SaveState = 'idle' | 'saving' | 'success' | 'error'
@@ -22,17 +27,22 @@ export function FieldItem({
   onSelect,
   onSave,
 }: FieldItemProps) {
-  const [draftValue, setDraftValue] = useState(field.current_value ?? '')
+  const [draftValue, setDraftValue] = useState(
+    toFieldDraftValue(field.field_code, field.current_value),
+  )
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const validationMessage = getFieldValidationMessage(
+    field.field_code,
+    draftValue,
+  )
 
   async function saveDraft() {
     if (!isEditable || saveState === 'saving') {
       return
     }
 
-    const trimmedValue = draftValue.trim()
-    const newValue = trimmedValue === '' ? null : trimmedValue
+    const newValue = toPersistedFieldValue(field.field_code, draftValue)
     if (newValue === field.current_value) {
       return
     }
@@ -41,7 +51,7 @@ export function FieldItem({
     setErrorMessage(null)
     try {
       await onSave(field, newValue)
-      setDraftValue(newValue ?? '')
+      setDraftValue(toFieldDraftValue(field.field_code, newValue))
       setSaveState('success')
     } catch (error: unknown) {
       setSaveState('error')
@@ -56,7 +66,9 @@ export function FieldItem({
       event.currentTarget.blur()
     }
     if (event.key === 'Escape') {
-      setDraftValue(field.current_value ?? '')
+      setDraftValue(
+        toFieldDraftValue(field.field_code, field.current_value),
+      )
       setSaveState('idle')
       setErrorMessage(null)
     }
@@ -71,8 +83,10 @@ export function FieldItem({
         <input
           className="field-item__input"
           value={draftValue}
+          type={field.field_code === 'email' ? 'email' : 'text'}
           placeholder="Chưa trích xuất"
           disabled={!isEditable || saveState === 'saving'}
+          aria-invalid={validationMessage !== null}
           onFocus={() => onSelect(field)}
           onChange={(event) => {
             setDraftValue(event.target.value)
@@ -96,7 +110,11 @@ export function FieldItem({
             : 'Không có bằng chứng'}
         </button>
         <span
-          className={`field-item__save-status field-item__save-status--${saveState}`}
+          className={`field-item__save-status field-item__save-status--${
+            validationMessage !== null && saveState === 'idle'
+              ? 'error'
+              : saveState
+          }`}
           aria-live="polite"
         >
           {saveState === 'saving'
@@ -105,6 +123,8 @@ export function FieldItem({
               ? 'Đã lưu'
               : saveState === 'error'
                 ? errorMessage
+                : validationMessage !== null
+                  ? validationMessage
                 : isEditable
                   ? 'Enter hoặc rời ô để lưu'
                   : 'Chỉ xem'}

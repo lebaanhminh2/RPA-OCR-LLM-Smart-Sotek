@@ -2,7 +2,8 @@
 
 > Source of truth cho danh mục trường M4. Tài liệu này chỉ mô tả dữ liệu trích
 > xuất từ 4 loại tài liệu MVP; không mô tả BPM mapping, suy diễn hay đối chiếu
-> chéo tài liệu. Ngoại lệ duy nhất là định dạng canonical cho bốn trường tiền.
+> chéo tài liệu. Ngoại lệ được duyệt gồm định dạng canonical cho bốn trường
+> tiền và sửa lỗi OCR email ở mức thận trọng.
 
 ## 1. Phạm vi
 
@@ -42,6 +43,12 @@
   Nếu kết quả Gemini không thể chuẩn hoá chắc chắn, field đó để `null` để chuyên
   viên nhập lại; không suy đoán. Quy tắc không áp dụng cho CCCD, số điện thoại,
   mã số thuế, số tài khoản hoặc trường số tiền bằng chữ.
+- Với `email`, Gemini chỉ được sửa lỗi OCR nhẹ khi có đúng một cách hiểu hợp lý,
+  ví dụ ký tự phân cách bị đọc nhầm thành khoảng trắng hoặc `o` thay cho `@`.
+  Kết quả phải có đúng một `@`, không có khoảng trắng và domain có dấu chấm;
+  không được tự thay đổi nhiều ký tự của tên người dùng/domain. Trường hợp mơ
+  hồ trả `null` để chuyên viên nhập lại. Review UI cảnh báo nhưng không khóa
+  thao tác sửa khi giá trị email hiện tại chưa đúng cấu trúc.
 
 ## 3. Core 40 field catalog
 
@@ -116,6 +123,11 @@ Local OMR chỉ phát ra ba trạng thái:
 - `UNCERTAIN`: không được coi là checked; phải để field `null` hoặc chuyển
   người dùng review khi orchestration/UI hỗ trợ cảnh báo.
 
+Một option `UNCERTAIN` không làm mất option khác đã được xác nhận `CHECKED`.
+Với single-choice, đúng một option `CHECKED` được giữ; từ hai option `CHECKED`
+trở lên vẫn là conflict và không tự chọn. Với multi-choice, các option
+`CHECKED` được giữ riêng, còn option `UNCERTAIN` không tạo evidence.
+
 Single-choice gồm: giới tính, tình trạng hôn nhân, trình độ học vấn, hình thức
 sở hữu nhà, kỳ hạn vay, phương thức giải ngân, loại tài khoản nhận giải ngân,
 chức vụ, loại hợp đồng lao động và hình thức nhận lương. Nhiều lựa chọn checked
@@ -123,6 +135,8 @@ trong một nhóm single-choice là conflict, không tự chọn một giá tr�
 
 `muc_dich_vay` là multi-choice. Giá trị canonical ở M4 là một JSON array được
 serialize thành string, ví dụ `["Sửa nhà","Học tập"]`; thứ tự theo biểu mẫu.
+Review UI parse chuỗi này để hiển thị/chỉnh sửa thân thiện, ví dụ
+`Sửa nhà, Học tập`, rồi serialize lại trước khi lưu.
 
 ### 4.2 Template strategy
 

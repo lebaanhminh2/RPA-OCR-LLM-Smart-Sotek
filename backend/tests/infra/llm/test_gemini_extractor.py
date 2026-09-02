@@ -161,6 +161,8 @@ def test_extract_uses_document_aware_prompt_and_structured_output() -> None:
     assert config.temperature == 0
     assert "15.000.000" in cast(str, config.system_instruction)
     assert "muc_luong_gross" in cast(str, config.system_instruction)
+    assert "đúng một @" in cast(str, config.system_instruction)
+    assert "nhiều cách hiểu" in cast(str, config.system_instruction)
 
 
 def test_extractor_retains_sdk_client_for_its_lifetime(

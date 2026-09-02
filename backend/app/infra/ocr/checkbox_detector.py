@@ -31,7 +31,7 @@ INK_DARKNESS_DELTA = 25.0
 LOCAL_SEARCH_RADIUS = 3
 CHECKBOX_BORDER_BAND = 2
 LOCAL_OFFSET_PENALTY = 0.5
-AXIS_ARTIFACT_OCCUPANCY = 0.60
+AXIS_ARTIFACT_OCCUPANCY = 0.90
 DENSE_MARK_MIN_INK = 0.30
 MIN_PAGE_SANITY_OPTIONS = 4
 MAX_PAGE_CHECKED_RATIO = 0.60
@@ -357,9 +357,16 @@ def classify_checkbox(
     added_ink = np.logical_and(observed_mask, np.logical_not(reference_mask))
     cleaned_ink = _remove_axis_aligned_artifacts(added_ink)
     raw_score = float(np.mean(added_ink))
+    cleaned_score = float(np.mean(cleaned_ink))
+    dense_score = (
+        raw_score
+        if raw_score >= DENSE_MARK_MIN_INK
+        and cleaned_score > thresholds.unchecked_max
+        else 0.0
+    )
     score = max(
-        float(np.mean(cleaned_ink)),
-        raw_score if raw_score >= DENSE_MARK_MIN_INK else 0.0,
+        cleaned_score,
+        dense_score,
     )
     if score <= thresholds.unchecked_max:
         confidence = 1.0 - score / max(thresholds.unchecked_max, 0.001)
@@ -455,8 +462,6 @@ class TemplateCheckboxDetector(CheckboxPageDetector):
         alignment: AlignmentResult,
         classified: list[ClassifiedOption],
     ) -> list[OCRBlock]:
-        if any(item[1] is CheckboxState.UNCERTAIN for item in classified):
-            return []
         checked = [
             item for item in classified if item[1] is CheckboxState.CHECKED
         ]

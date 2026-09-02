@@ -36,6 +36,10 @@ Quy tắc bắt buộc:
   chi_phi_sinh_hoat_hang_thang: chỉ trả số tiền VND với dấu chấm phân cách hàng
   nghìn, không kèm đơn vị hoặc mô tả, ví dụ 15.000.000. Không tìm thấy số tiền
   chắc chắn thì trả null.
+- Với email: được sửa lỗi OCR nhẹ và rõ ràng ở dấu phân cách như khoảng trắng
+  hoặc ký tự bị đọc nhầm thành @. Kết quả phải có đúng một @, không có khoảng
+  trắng và domain phải chứa dấu chấm. Không tự thay đổi nhiều ký tự của tên
+  người dùng/domain; nếu có nhiều cách hiểu hợp lý thì trả null.
 - Không chuẩn hoá các field khác hoặc suy diễn ngoài nội dung tài liệu.
 """.strip()
 

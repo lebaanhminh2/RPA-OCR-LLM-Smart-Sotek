@@ -12,6 +12,7 @@ from app.infra.ocr.checkbox_detector import (
     CheckboxState,
     CheckboxThresholds,
     TemplateCheckboxDetector,
+    _page_is_saturated,
     align_page,
     classify_checkbox,
 )
@@ -167,6 +168,55 @@ def test_classifier_distinguishes_unchecked_uncertain_and_checked() -> None:
     assert classify_checkbox(checked, reference, box, thresholds)[0] is (
         CheckboxState.CHECKED
     )
+
+
+def test_classifier_handles_uneven_dark_paper_and_print_through() -> None:
+    first = NormalizedBox(0.20, 0.40, 0.12, 0.12)
+    second = NormalizedBox(0.65, 0.40, 0.12, 0.12)
+    reference = np.full((140, 180), 255, dtype=np.uint8)
+    _draw_empty_box(reference, first)
+    _draw_empty_box(reference, second)
+    marked = reference.copy()
+    _draw_tick(marked, first)
+
+    horizontal_tone = np.linspace(0.48, 0.78, marked.shape[1])
+    vertical_tone = np.linspace(0.92, 1.0, marked.shape[0])[:, None]
+    observed = np.clip(
+        marked.astype(np.float32) * horizontal_tone * vertical_tone,
+        0,
+        255,
+    ).astype(np.uint8)
+    cv2.putText(
+        observed,
+        "FAINT REVERSE-SIDE TEXT",
+        (8, 78),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.35,
+        (115,),
+        1,
+        cv2.LINE_AA,
+    )
+
+    thresholds = CheckboxThresholds()
+    assert classify_checkbox(observed, reference, first, thresholds)[0] is (
+        CheckboxState.CHECKED
+    )
+    assert classify_checkbox(observed, reference, second, thresholds)[0] is (
+        CheckboxState.UNCHECKED
+    )
+
+
+def test_page_saturation_guard_fails_closed() -> None:
+    option = CheckboxOption(
+        "option",
+        NormalizedBox(0.1, 0.1, 0.1, 0.1),
+        NormalizedBox(0.1, 0.1, 0.2, 0.1),
+    )
+    checked = (option, CheckboxState.CHECKED, 1.0, (0, 0))
+    unchecked = (option, CheckboxState.UNCHECKED, 1.0, (0, 0))
+
+    assert _page_is_saturated([checked, checked, checked, unchecked])
+    assert not _page_is_saturated([checked, unchecked, unchecked, unchecked])
 
 
 def test_detector_aligns_perspective_and_maps_selection_bbox_back() -> None:

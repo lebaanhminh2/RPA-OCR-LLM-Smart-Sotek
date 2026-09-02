@@ -13,6 +13,7 @@ from PIL import Image  # type: ignore[import-untyped]
 from app.domain.models import OCRBlock, OCRBlockKind
 from app.infra.ocr.checkbox_template import (
     CheckboxGroup,
+    CheckboxOption,
     CheckboxTemplate,
     CheckboxTemplatePage,
     ChoiceMode,
@@ -25,6 +26,15 @@ REFERENCE_RENDER_SCALE = 2.0
 MIN_FEATURE_MATCHES = 12
 MIN_INLIER_RATIO = 0.35
 MIN_MARKERS = 2
+INK_BACKGROUND_KERNEL = 31
+INK_DARKNESS_DELTA = 25.0
+LOCAL_SEARCH_RADIUS = 3
+CHECKBOX_BORDER_BAND = 2
+LOCAL_OFFSET_PENALTY = 0.5
+AXIS_ARTIFACT_OCCUPANCY = 0.60
+DENSE_MARK_MIN_INK = 0.30
+MIN_PAGE_SANITY_OPTIONS = 4
+MAX_PAGE_CHECKED_RATIO = 0.60
 
 
 class CheckboxDetectionError(RuntimeError):
@@ -56,6 +66,14 @@ class AlignmentResult:
     image: NDArray[np.uint8]
     observed_to_reference: NDArray[np.float64]
     confidence: float
+
+
+ClassifiedOption = tuple[
+    CheckboxOption,
+    CheckboxState,
+    float,
+    tuple[int, int],
+]
 
 
 class CheckboxPageDetector(Protocol):
@@ -226,37 +244,43 @@ def _pixel_box(
     return x, y, right - x, bottom - y
 
 
-def _border_error(
-    reference: NDArray[np.uint8],
-    observed: NDArray[np.uint8],
-) -> float:
-    height, width = reference.shape
-    inset_y = max(1, height // 3)
-    inset_x = max(1, width // 3)
-    mask = np.ones((height, width), dtype=bool)
-    mask[inset_y : height - inset_y, inset_x : width - inset_x] = False
-    return float(
-        np.mean(
-            np.abs(
-                reference.astype(np.int16)[mask]
-                - observed.astype(np.int16)[mask]
-            )
-        )
+def _ink_response(image: NDArray[np.uint8]) -> NDArray[np.float32]:
+    """Measure dark ink relative to the slowly varying local paper tone."""
+    background = cv2.GaussianBlur(
+        image,
+        (INK_BACKGROUND_KERNEL, INK_BACKGROUND_KERNEL),
+        0,
+    ).astype(np.float32)
+    return np.maximum(0.0, background - image.astype(np.float32))
+
+
+def _border_strength(patch: NDArray[np.float32]) -> float:
+    band = min(
+        CHECKBOX_BORDER_BAND,
+        max(1, min(patch.shape) // 3),
     )
+    sides = (
+        float(np.mean(patch[:band, :])),
+        float(np.mean(patch[-band:, :])),
+        float(np.mean(patch[:, :band])),
+        float(np.mean(patch[:, -band:])),
+    )
+    return float(np.mean(sides)) + 0.3 * min(sides)
 
 
 def _refine_box(
-    aligned: NDArray[np.uint8],
+    observed_ink: NDArray[np.float32],
     reference: NDArray[np.uint8],
     box: NormalizedBox,
 ) -> tuple[int, int, int, int, int, int]:
     height, width = reference.shape
     x, y, box_width, box_height = _pixel_box(box, width, height)
-    reference_patch = reference[y : y + box_height, x : x + box_width]
-    margin = max(2, min(box_width, box_height) // 3)
-    best = (float("inf"), 0, 0)
-    for offset_y in range(-margin, margin + 1):
-        for offset_x in range(-margin, margin + 1):
+    best = (float("-inf"), 0, 0)
+    for offset_y in range(-LOCAL_SEARCH_RADIUS, LOCAL_SEARCH_RADIUS + 1):
+        for offset_x in range(
+            -LOCAL_SEARCH_RADIUS,
+            LOCAL_SEARCH_RADIUS + 1,
+        ):
             candidate_x = x + offset_x
             candidate_y = y + offset_y
             if (
@@ -266,14 +290,26 @@ def _refine_box(
                 or candidate_y + box_height > height
             ):
                 continue
-            candidate = aligned[
+            candidate = observed_ink[
                 candidate_y : candidate_y + box_height,
                 candidate_x : candidate_x + box_width,
             ]
-            error = _border_error(reference_patch, candidate)
-            if error < best[0]:
-                best = (error, offset_x, offset_y)
+            score = _border_strength(candidate) - LOCAL_OFFSET_PENALTY * (
+                abs(offset_x) + abs(offset_y)
+            )
+            if score > best[0]:
+                best = (score, offset_x, offset_y)
     return x + best[1], y + best[2], box_width, box_height, best[1], best[2]
+
+
+def _remove_axis_aligned_artifacts(
+    ink: NDArray[np.bool_],
+) -> NDArray[np.bool_]:
+    """Remove residual straight box-border rows/columns after local alignment."""
+    artifacts = np.zeros_like(ink)
+    artifacts[:, np.mean(ink, axis=0) >= AXIS_ARTIFACT_OCCUPANCY] = True
+    artifacts[np.mean(ink, axis=1) >= AXIS_ARTIFACT_OCCUPANCY, :] = True
+    return np.logical_and(ink, np.logical_not(artifacts))
 
 
 def classify_checkbox(
@@ -281,36 +317,50 @@ def classify_checkbox(
     reference: NDArray[np.uint8],
     box: NormalizedBox,
     thresholds: CheckboxThresholds,
+    *,
+    observed_ink: NDArray[np.float32] | None = None,
+    reference_ink: NDArray[np.float32] | None = None,
 ) -> tuple[CheckboxState, float, tuple[int, int]]:
+    observed_response = (
+        observed_ink if observed_ink is not None else _ink_response(aligned)
+    )
+    reference_response = (
+        reference_ink
+        if reference_ink is not None
+        else _ink_response(reference)
+    )
     x, y, width, height, offset_x, offset_y = _refine_box(
-        aligned, reference, box
+        observed_response,
+        reference,
+        box,
     )
     inset_x = max(1, width // 4)
     inset_y = max(1, height // 4)
-    observed_inner = aligned[
+    observed_inner = observed_response[
         y + inset_y : y + height - inset_y,
         x + inset_x : x + width - inset_x,
     ]
     reference_x = x - offset_x
     reference_y = y - offset_y
-    reference_inner = reference[
+    reference_inner = reference_response[
         reference_y + inset_y : reference_y + height - inset_y,
         reference_x + inset_x : reference_x + width - inset_x,
     ]
     if observed_inner.size == 0 or reference_inner.size == 0:
         return CheckboxState.UNCERTAIN, 0.0, (offset_x, offset_y)
-    observed_ink = float(np.mean(observed_inner < 190))
-    reference_ink = float(np.mean(reference_inner < 190))
-    changed = float(
-        np.mean(
-            np.abs(
-                observed_inner.astype(np.int16)
-                - reference_inner.astype(np.int16)
-            )
-            > 55
-        )
+    observed_mask = observed_inner > INK_DARKNESS_DELTA
+    reference_mask = reference_inner > INK_DARKNESS_DELTA
+    reference_mask = cv2.dilate(
+        reference_mask.astype(np.uint8),
+        np.ones((3, 3), dtype=np.uint8),
+    ).astype(bool)
+    added_ink = np.logical_and(observed_mask, np.logical_not(reference_mask))
+    cleaned_ink = _remove_axis_aligned_artifacts(added_ink)
+    raw_score = float(np.mean(added_ink))
+    score = max(
+        float(np.mean(cleaned_ink)),
+        raw_score if raw_score >= DENSE_MARK_MIN_INK else 0.0,
     )
-    score = min(1.0, max(0.0, observed_ink - reference_ink, changed))
     if score <= thresholds.unchecked_max:
         confidence = 1.0 - score / max(thresholds.unchecked_max, 0.001)
         return CheckboxState.UNCHECKED, confidence, (offset_x, offset_y)
@@ -318,6 +368,15 @@ def classify_checkbox(
         confidence = min(1.0, score / thresholds.checked_min)
         return CheckboxState.CHECKED, confidence, (offset_x, offset_y)
     return CheckboxState.UNCERTAIN, 0.0, (offset_x, offset_y)
+
+
+def _page_is_saturated(classified: list[ClassifiedOption]) -> bool:
+    if len(classified) < MIN_PAGE_SANITY_OPTIONS:
+        return False
+    checked_count = sum(
+        state is CheckboxState.CHECKED for _, state, _, _ in classified
+    )
+    return checked_count / len(classified) >= MAX_PAGE_CHECKED_RATIO
 
 
 def _map_box_to_observed(
@@ -394,19 +453,8 @@ class TemplateCheckboxDetector(CheckboxPageDetector):
         reference: NDArray[np.uint8],
         observed: NDArray[np.uint8],
         alignment: AlignmentResult,
+        classified: list[ClassifiedOption],
     ) -> list[OCRBlock]:
-        classified = [
-            (
-                option,
-                *classify_checkbox(
-                    alignment.image,
-                    reference,
-                    option.box,
-                    self._thresholds,
-                ),
-            )
-            for option in group.options
-        ]
         if any(item[1] is CheckboxState.UNCERTAIN for item in classified):
             return []
         checked = [
@@ -458,8 +506,35 @@ class TemplateCheckboxDetector(CheckboxPageDetector):
         observed = _to_gray(image)
         reference = self._reference_pages[page_number]
         alignment = align_page(observed, reference, page)
+        observed_ink = _ink_response(alignment.image)
+        reference_ink = _ink_response(reference)
+        classifications = [
+            [
+                (
+                    option,
+                    *classify_checkbox(
+                        alignment.image,
+                        reference,
+                        option.box,
+                        self._thresholds,
+                        observed_ink=observed_ink,
+                        reference_ink=reference_ink,
+                    ),
+                )
+                for option in group.options
+            ]
+            for group in page.groups
+        ]
+        if _page_is_saturated(
+            [item for group_items in classifications for item in group_items]
+        ):
+            return []
         blocks: list[OCRBlock] = []
-        for group in page.groups:
+        for group, classified in zip(
+            page.groups,
+            classifications,
+            strict=True,
+        ):
             blocks.extend(
                 self._group_blocks(
                     document_id,
@@ -468,6 +543,7 @@ class TemplateCheckboxDetector(CheckboxPageDetector):
                     reference,
                     observed,
                     alignment,
+                    classified,
                 )
             )
         return blocks

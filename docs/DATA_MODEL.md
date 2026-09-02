@@ -9,7 +9,7 @@
 |---|---|
 | **Case** | Đại diện cho 1 hồ sơ vay từ lương. Là "gốc" gắn kết mọi thứ khác lại: document, field, action. |
 | **Document** | 1 file giấy tờ đã upload, thuộc 1 trong 4 loại bắt buộc, gắn với 1 Case. |
-| **OCRBlock** | 1 khối chữ được OCR phát hiện + đọc ra từ 1 Document. Là **nguồn sự thật duy nhất** cho mọi bounding box. |
+| **OCRBlock** | 1 khối evidence được local OCR/OMR tạo từ 1 Document: text nhận dạng hoặc checkbox selection. Là **nguồn sự thật duy nhất** cho mọi bounding box. |
 | **ExtractedField** | 1 trường dữ liệu nghiệp vụ (ví dụ: họ tên, số CCCD...) mà LLM trích xuất được cho 1 Case. |
 | **FieldSource** | Liên kết 1 ExtractedField với 1 (hoặc nhiều) OCRBlock — chính là kết quả của bước "backend map source_ids → bounding box". |
 | **ReviewAction** | Nhật ký (audit log) các hành động chuyên viên thực hiện: sửa field, bấm Upload. |
@@ -52,8 +52,9 @@ rẽ sang `FAILED` nếu bước OCR/LLM gặp lỗi ở `PROCESSING`.
 
 **Document.ocr_status** (enum): `PENDING → DONE` hoặc `PENDING → FAILED`.
 
-**OCRBlock**: được tạo 1 lần duy nhất khi OCR chạy xong cho 1 Document, sau đó
-**bất biến (immutable)** — không entity nào khác được sửa bbox của nó.
+**OCRBlock**: được tạo 1 lần duy nhất khi local OCR/OMR chạy xong cho 1
+Document, sau đó **bất biến (immutable)** — không entity nào khác được sửa
+text, loại block hoặc bbox của nó.
 
 **ExtractedField**: được tạo 1 lần khi LLM extraction chạy xong (giá trị ban đầu
 = `original_value`). Sau đó `current_value` có thể được chuyên viên sửa nhiều
@@ -102,8 +103,9 @@ không phải phạm vi DATA_MODEL).
 |---|---|---|---|
 | id | string (UUID) | ✔ | Khoá chính — **đây chính là `source_id`** nhắc tới xuyên suốt PROJECT_BRIEF/ARCHITECTURE. Hệ thống tự sinh, không dùng ID nội bộ của PaddleOCR. |
 | document_id | FK → Document.id | ✔ | |
+| block_kind | enum `OCRBlockKind` | ✔ | `TEXT` hoặc `CHECKBOX_SELECTION`; dữ liệu cũ mặc định `TEXT`. |
 | page_number | integer | ✔ | Đánh số từ 1 |
-| text | string | ✔ | Nội dung chữ do VietOCR nhận dạng |
+| text | string | ✔ | Với `TEXT`: chữ do VietOCR nhận dạng. Với `CHECKBOX_SELECTION`: payload canonical do local OMR tạo, gồm `field_code` và option đã chọn; không phải text do LLM suy đoán. |
 | bbox_x, bbox_y, bbox_width, bbox_height | float (0.0–1.0) | ✔ | Toạ độ **chuẩn hoá** theo tỉ lệ trang (không dùng pixel tuyệt đối) — để hiển thị đúng dù PDF.js render ở độ phóng to/thu nhỏ nào. |
 | confidence | float (0.0–1.0) | ✔ | Độ tin cậy do OCR trả về |
 | created_at | datetime | ✔ | |
@@ -112,6 +114,12 @@ không phải phạm vi DATA_MODEL).
 > đối, vì frontend (PDF.js) có thể render trang ở nhiều mức zoom khác nhau — toạ
 > độ tỉ lệ giúp tính lại vị trí highlight chính xác ở bất kỳ kích thước hiển thị
 > nào mà không cần lưu thêm thông tin về độ phân giải gốc.
+
+`CHECKBOX_SELECTION` chỉ được tạo cho option ở trạng thái `CHECKED`. Trạng thái
+`UNCHECKED` không tạo block. `UNCERTAIN`, sai template, căn chỉnh không đạt hoặc
+nhiều option checked trong nhóm single-choice phải fail closed; không tạo
+selection block giả. Bbox của selection block bao quanh checkbox và label đủ để
+Review UI hiển thị bằng chứng có ý nghĩa.
 
 ### 4.4 ExtractedField
 
@@ -157,6 +165,7 @@ không có `FieldSource`; field có value do LLM trả về phải có ít nhấ
 {
   "id": "ocr_9f1a",
   "document_id": "doc_cccd_front",
+  "block_kind": "TEXT",
   "page_number": 1,
   "text": "NGUYEN VAN A",
   "bbox_x": 0.12,
@@ -164,6 +173,23 @@ không có `FieldSource`; field có value do LLM trả về phải có ít nhấ
   "bbox_width": 0.30,
   "bbox_height": 0.04,
   "confidence": 0.97
+}
+```
+
+**OCRBlock** (1 lựa chọn checkbox được local OMR xác nhận):
+
+```json
+{
+  "id": "ocr_checkbox_31ab",
+  "document_id": "doc_loan_application",
+  "block_kind": "CHECKBOX_SELECTION",
+  "page_number": 1,
+  "text": "field_code=ky_han_vay;option=24 tháng",
+  "bbox_x": 0.31,
+  "bbox_y": 0.16,
+  "bbox_width": 0.11,
+  "bbox_height": 0.025,
+  "confidence": 0.99
 }
 ```
 

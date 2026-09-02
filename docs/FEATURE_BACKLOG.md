@@ -897,6 +897,12 @@ phải dừng lại và chờ xác nhận hướng xử lý.
 
 **Requirements:**
 - Liệt kê từng `field_code`, label, data type và document source dự kiến (`CCCD_FRONT`, `CCCD_BACK`, `LOAN_APPLICATION`, `LABOR_CONTRACT`).
+- Chốt Core 40 field, tất cả dùng raw `string | null`; không tự mở rộng sang
+  toàn bộ BPM form.
+- Chốt checkbox semantics: nhóm single-choice, `muc_dich_vay` multi-choice,
+  `UNCERTAIN`/conflict không được tự chọn.
+- Ghi rõ V1 không marker và V2 có marker cùng được hỗ trợ; runtime input vẫn là
+  PDF/ảnh, không thêm DOCX upload.
 - Chỉ gồm field thật sự cần demo trong MVP; không thêm cross-document validation.
 - Quy định output khi không tìm thấy field: `value = null`, `source_ids = []`.
 - Quy định field có value thì mọi `source_id` phải tồn tại trong OCRBlock input.
@@ -918,6 +924,51 @@ Không code ứng dụng. Đọc docs/PROJECT_BRIEF.md và docs/DATA_MODEL.md, s
 
 
 
+### M4-T1A — Local template OMR cho checkbox
+
+**Goal:** Biến checkbox đã chọn trên `LOAN_APPLICATION` thành evidence block có
+source ID/bbox trước khi gọi Gemini.
+
+**Files/modules:** `backend/app/infra/ocr/` (module template/alignment/detector),
+`backend/app/infra/ocr/local_ocr_adapter.py`, template config/assets và tests
+liên quan.
+
+**Requirements:**
+- Chỉ chạy cho `LOAN_APPLICATION` có template/version đã đăng ký.
+- `OCRProvider.extract` nhận thêm `document_type` từ orchestration; adapter
+  không đoán loại tài liệu từ filename. Cập nhật các fake/call site liên quan.
+- V1 không marker: feature matching + RANSAC/homography với blank template.
+- V2 có bốn marker ID khác nhau: ưu tiên marker để nhận diện version/căn chỉnh;
+  fallback V1 chỉ khi template config cho phép.
+- Sau căn chỉnh vẫn tìm lại checkbox quanh ROI chuẩn hoá và so sánh phần ruột
+  với blank template; không dùng một pixel/toạ độ tuyệt đối.
+- Phân loại `CHECKED`, `UNCHECKED`, `UNCERTAIN`; chỉ `CHECKED` tạo
+  `OCRBlockKind.CHECKBOX_SELECTION` có canonical field/option, bbox thật và
+  confidence.
+- Nhiều lựa chọn trong single-choice, sai template, thiếu vùng cần thiết hoặc
+  alignment score thấp phải fail closed; không tự chọn option gần nhất.
+- Dùng OpenCV và NumPy trong OCR environment đã approved; không thêm dependency.
+
+**Acceptance criteria:**
+- [ ] Synthetic PDF trên đúng production template đọc đúng tick/X/tô kín ở
+      các nhóm checkbox đã đăng ký.
+- [ ] Blur/xoay/phối cảnh ở mức acceptance fixture vẫn căn chỉnh và đọc đúng;
+      mẫu dưới ngưỡng chất lượng trả uncertain/failure thay vì chọn sai.
+- [ ] Selection block có source ID và bbox chuẩn hoá để Review UI highlight.
+- [ ] V1 không marker chạy được; config V2 có marker được hỗ trợ mà không đổi
+      contract phía người upload.
+
+**Tests required:** Unit test classifier checked/unchecked/uncertain và
+single-choice conflict; một synthetic PDF fixture bao phủ alignment + local
+ROI + bbox. Không cần tạo ma trận lớn các biến thể gần giống nhau ở task này.
+
+**Do not do:** Không dùng OCR text/Gemini để đoán tick; không thêm provider,
+subprocess/microservice hoặc dependency; không dùng tài liệu khách hàng thật.
+
+**Dependencies:** M3-T3, M3-T6, `docs/EXTRACTION_SCHEMA.md`.
+
+---
+
 ### M4-T2 — LLMProvider port interface
 
 **Goal:** Định nghĩa interface `LLMProvider` ở tầng `domain/ports/`.
@@ -925,8 +976,12 @@ Không code ứng dụng. Đọc docs/PROJECT_BRIEF.md và docs/DATA_MODEL.md, s
 **Files/modules:** `backend/app/domain/ports/llm_provider.py`.
 
 **Requirements:**
-- Interface nhận input là danh sách `OCRBlock` (text + source_id) của 1 case,
-  trả về danh sách field trích xuất (`field_code`, `value`, `source_ids`), trong đó `value` có thể null khi không tìm thấy.
+- Định nghĩa `LLMDocumentInput` gồm `document_id`, `document_type` và danh sách
+  `OCRBlock` của document đó. Interface nhận danh sách document input của 1
+  case, trả về danh sách field trích xuất (`field_code`, `value`,
+  `source_ids`), trong đó `value` có thể null khi không tìm thấy.
+- Giữ nguyên page/bbox/source ID và document grouping; adapter không query
+  repository để tự tìm document type.
 - Không import Google Gemini SDK trong file này.
 
 **Acceptance criteria:**
@@ -944,7 +999,8 @@ Không code ứng dụng. Đọc docs/PROJECT_BRIEF.md và docs/DATA_MODEL.md, s
 Đọc docs/ARCHITECTURE.md mục 3-4, mục 6 (LLM Extraction Module) và
 DEVELOPMENT_RULES.md mục 5 trước khi làm. Trong
 app/domain/ports/llm_provider.py, định nghĩa interface trừu tượng
-LLMProvider: nhận input là danh sách OCRBlock (text + source_id) của 1 case,
+LLMProvider: nhận input là danh sách LLMDocumentInput của 1 case; mỗi input có
+document_id, document_type và danh sách OCRBlock (text/checkbox selection + source_id),
 trả về danh sách field trích xuất gồm field_code, value (nullable), source_ids (danh
 sách source_id tham chiếu tới OCRBlock đã có). Quy ước: value=null thì source_ids=[]; value có dữ liệu thì source_ids phải có ít nhất 1 phần tử hợp lệ. File này tuyệt đối không được
 import SDK Google Gemini - chỉ định nghĩa hợp đồng.
@@ -990,7 +1046,11 @@ retry/backoff.
 **Files/modules:** `backend/app/infra/llm/gemini_extractor.py`.
 
 **Requirements:**
-- Gọi Gemini API (free tier) với schema JSON định sẵn (`field_code`, `value`, `source_ids`), validate response bằng Pydantic và theo `docs/EXTRACTION_SCHEMA.md`.
+- Dùng đúng SDK `google-genai==2.21.0` (không dùng legacy
+  `google-generativeai`) và model `gemini-3.7-flash`.
+- Gọi Gemini API (free tier) với document-aware input và schema JSON định sẵn
+  (`field_code`, `value`, `source_ids`), validate response bằng Pydantic và
+  theo `docs/EXTRACTION_SCHEMA.md`.
 - Retry/backoff giới hạn số lần khi gặp lỗi 429 (DEVELOPMENT_RULES.md §14) —
   không retry vô hạn.
 - API key đọc từ biến môi trường, không hard-code.
@@ -1004,7 +1064,9 @@ retry/backoff.
 + test riêng cho retry/backoff (mock lỗi 429), không bắt buộc gọi Gemini thật
 trong test tự động (DEVELOPMENT_RULES.md §8).
 
-**Do not do:** Không đổi LLM provider khác Gemini; không retry vô hạn.
+**Do not do:** Không đổi LLM provider khác Gemini; không retry vô hạn; không
+thêm retry dependency như tenacity nếu SDK/thư viện chuẩn đã đủ; không gửi tài
+liệu khách hàng thật trong smoke/demo.
 
 **Dependencies:** M4-T2, M4-T3.
 
@@ -1013,7 +1075,8 @@ trong test tự động (DEVELOPMENT_RULES.md §8).
 Đọc docs/ARCHITECTURE.md mục 1 và mục 6 (LLM Extraction Module), PROJECT_BRIEF.md
 mục 5 bước 3 (LLM không được tự tạo bbox), và DEVELOPMENT_RULES.md mục 14
 trước khi làm. Trong app/infra/llm/gemini_extractor.py, implement interface
-LLMProvider: gọi Gemini API (Google AI Studio free tier) với structured
+LLMProvider: dùng google-genai==2.21.0 gọi model gemini-3.7-flash (Google AI
+Studio free tier) với document-aware input và structured
 output schema JSON định sẵn (field_code, value, source_ids), validate response
 bằng Pydantic và theo docs/EXTRACTION_SCHEMA.md. value=null phải đi cùng source_ids=[]; value có dữ liệu phải có ít nhất một source_id. API key đọc từ biến môi trường (GEMINI_API_KEY), không
 hard-code. Có cơ chế retry/backoff đơn giản khi gặp lỗi rate-limit (429), giới
@@ -1072,7 +1135,8 @@ rộng).
 
 **Requirements:**
 - Sau khi tất cả document có `ocr_status = DONE`, gọi `LLMProvider` với toàn
-  bộ `OCRBlock` của case.
+  bộ `OCRBlock` của case được nhóm thành `LLMDocumentInput` kèm đúng
+  `document_id`/`document_type`.
 - **Validate nghiêm:** `value = null` chỉ hợp lệ khi `source_ids = []`; nếu field có value thì phải có ít nhất 1 `source_id`, và mọi `source_id` phải tồn tại trong `OCRBlock` đã lưu của case đó. LLM không được tự tạo bbox/source id.
 - Lưu `ExtractedField` + `FieldSource`, chuyển `Case.status → READY_FOR_REVIEW`
   (hoặc `FAILED` nếu LLM lỗi/validate thất bại sau retry).
@@ -1096,8 +1160,10 @@ free tier đôi khi trả sai — đây là rule cứng từ PROJECT_BRIEF.
 Đọc docs/PROJECT_BRIEF.md mục 3 và mục 5 bước 3-4 (LLM không được tự tạo bbox),
 DATA_MODEL.md mục 3, và ARCHITECTURE.md mục 6 (Mapping) trước khi làm. Mở
 rộng app/domain/services/extraction_service.py: sau khi tất cả document của 1
-case có ocr_status = DONE, gọi LLMProvider (qua interface, không import
-Gemini SDK trực tiếp) với toàn bộ OCRBlock của case. Validate nghiêm theo docs/EXTRACTION_SCHEMA.md: value=null chỉ hợp lệ khi source_ids=[]; nếu value có dữ liệu thì phải có ít nhất 1 source_id và mọi source_id phải khớp OCRBlock đã có trong case. Nếu sai, CHẶN field đó - đây là rule cứng, không được nới lỏng. Lưu ExtractedField + FieldSource hợp lệ, chuyển Case.status
+case có ocr_status = DONE, nhóm toàn bộ OCRBlock theo document và gọi
+LLMProvider (qua interface, không import Gemini SDK trực tiếp) bằng danh sách
+LLMDocumentInput có document_id/document_type. Validate nghiêm theo
+docs/EXTRACTION_SCHEMA.md: value=null chỉ hợp lệ khi source_ids=[]; nếu value có dữ liệu thì phải có ít nhất 1 source_id và mọi source_id phải khớp OCRBlock đã có trong case. Nếu sai, CHẶN field đó - đây là rule cứng, không được nới lỏng. Lưu ExtractedField + FieldSource hợp lệ, chuyển Case.status
 sang READY_FOR_REVIEW. Nếu LLM lỗi sau khi hết retry hoặc toàn bộ field đều bị
 validate chặn, chuyển Case.status sang FAILED. Viết unit test dùng fake
 LLMProvider, bao gồm test case: field hợp lệ được lưu đúng, field có

@@ -206,10 +206,21 @@ và có thể xem qua API danh sách `ExtractedField` kèm `sources` (như ví d
 
 **Tasks:**
 - Trước khi code M4, phải có `docs/EXTRACTION_SCHEMA.md` chốt danh sách field MVP, field type và document source dự kiến. Đây là input cho prompt/schema LLM; không để Codex tự invent field_code trong lúc code.
+- Mở rộng local OCR adapter bằng template-assisted OMR cho checkbox của
+  `LOAN_APPLICATION`: hỗ trợ V1 không marker và V2 có marker; căn chỉnh trang,
+  tinh chỉnh ROI cục bộ, tạo `CHECKBOX_SELECTION` block khi đủ chắc chắn và
+  fail closed khi uncertain/conflict. Dùng OpenCV/NumPy đã có, không thêm
+  dependency.
+- Mở rộng `OCRProvider.extract` để orchestration truyền `document_type`; không
+  đoán loại tài liệu từ filename và không bật OMR cho ba loại tài liệu khác.
+- Mở rộng `OCRBlock` bằng `block_kind` để phân biệt text và checkbox evidence;
+  không tạo hệ thống bbox/evidence song song.
+- `LLMProvider` nhận document-aware input (`document_id`, `document_type`,
+  `blocks`) thay vì danh sách block bị mất ngữ cảnh nguồn.
 - Backend: `infra/llm/gemini_extractor.py` implement `LLMProvider` port — gọi
-  Gemini API với structured output schema (`field_code`, `value`,
-  `source_ids`), validate bằng Pydantic. Có retry/backoff giới hạn số lần khi
-  gặp 429 (DEVELOPMENT_RULES.md §14).
+  model `gemini-3.7-flash` qua `google-genai==2.21.0` với structured output
+  schema (`field_code`, `value`, `source_ids`), validate bằng Pydantic. Có
+  retry/backoff giới hạn số lần khi gặp 429 (DEVELOPMENT_RULES.md §14).
 - Backend: validate nghiêm ở tầng domain — chặn nếu LLM trả về `source_id`
   không tồn tại trong `OCRBlock` đã lưu (đúng nguyên tắc "LLM không tự tạo
   bbox").
@@ -220,19 +231,26 @@ và có thể xem qua API danh sách `ExtractedField` kèm `sources` (như ví d
 - Backend: adapter test cho `gemini_extractor.py` dùng dữ liệu mẫu cố định,
   không bắt buộc gọi Gemini thật trong test tự động (DEVELOPMENT_RULES.md §8).
 
-**Dependencies:** M3 (cần `OCRBlock` làm input cho LLM).
+**Dependencies:** M3 (cần `OCRBlock` làm input cho LLM), catalog Core 40 và
+template checkbox V1 đã được đăng ký.
 
 **Acceptance criteria:**
 - [ ] Sau khi OCR xong cả 4 document, LLM tự chạy, tạo được `ExtractedField`
       cho các field nghiệp vụ chính (ví dụ `ho_ten`, `so_cccd`, `ngay_sinh`).
+- [ ] Checkbox của synthetic loan-application PDF được đọc thành evidence có
+      source ID/bbox; input uncertain/conflict không bị tự chọn sai.
+- [ ] Gemini nhận biết được source document của từng block mà không query
+      repository từ adapter.
 - [ ] Field có value phải có ít nhất 1 `FieldSource` hợp lệ; field không tìm thấy được lưu với `value = null`, không có source. Không có `source_id` bịa.
 - [ ] `Case.status` chuyển đúng `PROCESSING → READY_FOR_REVIEW`, hoặc `→
       FAILED` nếu Gemini lỗi sau khi hết số lần retry.
 - [ ] Retry/backoff hoạt động đúng khi giả lập lỗi 429 (test bằng mock).
 
-**Tests:** Unit test phần điều phối LLM trong `extraction_service.py` dùng
-fake `LLMProvider` (bao gồm case missing hợp lệ và case LLM trả `source_id` không hợp lệ → phải bị chặn). Adapter test cho `gemini_extractor.py` với fixture cố định + mock
-retry/backoff.
+**Tests:** Giữ bộ test rủi ro cao, tránh ma trận biến thể trùng lặp: unit test
+OMR cho checked/unchecked/uncertain + conflict; một fixture synthetic PDF kiểm
+tra căn chỉnh/checkbox/bbox; unit test điều phối dùng fake `LLMProvider` cho
+case missing và source ID không hợp lệ; adapter test Gemini fixture cố định +
+mock retry/backoff. Không gọi Gemini thật trong test tự động.
 
 **Definition of Done:** Lint/test/typecheck pass. Demo được: từ lúc upload
 xong tới lúc `READY_FOR_REVIEW`, dữ liệu `ExtractedField`/`FieldSource` đúng

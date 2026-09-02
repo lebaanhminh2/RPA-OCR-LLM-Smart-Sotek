@@ -10,7 +10,7 @@
 | Frontend | Vite + React + TypeScript + PDF.js | Vite cho dev/build đơn giản; React + TypeScript phù hợp Review UI; PDF.js render PDF và hỗ trợ overlay highlight theo bbox. |
 | Backend | Python + FastAPI + Pydantic | Đúng đề xuất ban đầu. Pydantic giúp validate dữ liệu OCR/LLM (vốn có schema phức tạp: block, bbox, field, source_id) một cách chặt chẽ. |
 | Database / persistence | SQLite + SQLAlchemy 2.x | SQLite phù hợp MVP local; SQLAlchemy 2.x giúp schema/repository rõ ràng và dễ chuyển sang PostgreSQL sau này mà không đổi domain logic. |
-| OCR provider | **Tự host, miễn phí: PaddleOCR (text detection) + VietOCR (nhận dạng tiếng Việt)** | PaddleOCR (mã nguồn mở, Apache 2.0) làm bước *detection* — tìm vùng chữ và trả về bounding box + confidence, đúng cấu trúc OCRBlock cần. VietOCR (`pbcquoc/vietocr`) làm bước *recognition* tiếng Việt trên từng vùng đã detect. Cả hai chạy local. **Rủi ro cần thử nghiệm sớm:** không giả định chất lượng chữ viết tay sẽ đạt yêu cầu; phải benchmark trực tiếp trên mẫu giấy đề nghị vay của dự án ở M3 trước khi tiếp tục. Nếu không đạt, dừng và đánh giá hướng cải thiện OCR thay vì âm thầm đổi kiến trúc. |
+| OCR provider | **Tự host, miễn phí: PaddleOCR (text detection) + VietOCR (nhận dạng tiếng Việt) + local template OMR cho checkbox** | PaddleOCR (mã nguồn mở, Apache 2.0) tìm vùng chữ và trả về bounding box + confidence; VietOCR (`pbcquoc/vietocr`) nhận dạng tiếng Việt trên từng vùng đã detect. Checkbox trên biểu mẫu cố định được đọc bằng OpenCV template OMR trong cùng local adapter, không giao cho OCR text hoặc Gemini suy đoán. Cả ba bước chạy local. **Rủi ro cần thử nghiệm sớm:** không giả định chất lượng chữ viết tay/ảnh chụp sẽ đạt yêu cầu; phải benchmark trên dữ liệu synthetic đại diện và fail closed khi confidence không đạt. |
 | LLM provider | **Google Gemini API (Google AI Studio, free tier)** | Hỗ trợ tiếng Việt và structured output theo schema. Free-tier quota có thể thay đổi nên code phải xử lý rate-limit/retry có giới hạn; chỉ dùng dữ liệu synthetic cho demo. |
 
 Không đổi frontend/backend/DB so với đề xuất ban đầu vì đã hợp lý với quy mô MVP.
@@ -56,7 +56,8 @@ nếu sau MVP cần đổi OCR/LLM provider, chỉ cần viết adapter mới, k
    - **Ports** (`domain/ports/`) — interface trừu tượng: `OCRProvider`,
      `LLMProvider`, `Repository` (không có code cụ thể, chỉ định nghĩa "hợp đồng").
 3. **Infra layer** (`infra/`) — implement các port ở trên:
-   - Adapter chạy PaddleOCR + VietOCR, convert kết quả thành OCRBlock nội bộ.
+   - Adapter chạy PaddleOCR + VietOCR và local template OMR, convert text và
+     checkbox selection thành OCRBlock nội bộ có phân loại rõ ràng.
    - Adapter gọi Google Gemini, convert response thành dữ liệu extraction nội bộ.
    - Repository dùng SQLAlchemy 2.x để đọc/ghi SQLite cho Case, Document, OCRBlock, ExtractedField,
      FieldSource, ReviewAction.
@@ -136,19 +137,30 @@ project-root/
 
 ## 6. Giải thích chi tiết các module chính
 
-- **OCR Module** (`infra/ocr/local_ocr_adapter.py`, implement `OCRProvider`) —
-  nhận file ảnh/PDF của một document, chạy **local** hai bước: (1) PaddleOCR
-  detection để tìm các vùng chữ và toạ độ; (2) cắt từng vùng đó và đưa qua VietOCR
-  để nhận dạng nội dung chữ tiếng Việt (kể cả chữ viết tay). Kết quả được ghép lại
-  thành danh sách `OCRBlock` nội bộ (text, page, bbox, confidence, source_id do hệ
-  thống tự sinh). Vì chạy local, module này cần có model weights của PaddleOCR và
-  VietOCR sẵn trên máy (tải một lần khi cài đặt) — không có network call ra ngoài
-  trong lúc xử lý. Đây là **nguồn sự thật duy nhất** cho mọi bounding box trong hệ
-  thống — không module nào khác được tự tạo bbox.
+- **OCR Module** (`infra/ocr/`, implement `OCRProvider`) — nhận file ảnh/PDF của
+  một document kèm `document_type` và chạy local: (1) PaddleOCR detection tìm
+  vùng chữ và toạ độ;
+  (2) VietOCR nhận dạng nội dung tiếng Việt trong từng vùng; (3) với
+  `LOAN_APPLICATION` thuộc template đã đăng ký, template OMR căn chỉnh trang và
+  phân loại checkbox. Kết quả text và checkbox selection đều trở thành
+  `OCRBlock` nội bộ có `block_kind`, page, bbox chuẩn hoá, confidence và
+  source_id do hệ thống tự sinh. OMR hỗ trợ template V1 không marker bằng
+  feature matching/homography và V2 có marker ID ở bốn góc; cả hai đều tinh
+  chỉnh checkbox trong ROI cục bộ và fail closed nếu không đủ chắc chắn. Vì
+  chạy local, module cần model weights PaddleOCR/VietOCR sẵn trên máy và không
+  gọi network khi xử lý. Đây là **nguồn sự thật duy nhất** cho mọi bounding box
+  trong hệ thống — LLM và các module khác không được tự tạo bbox.
+
+  `OCRProvider.extract` nhận `document_id`, `document_type` và `file_path`.
+  `document_type` là metadata orchestration đã có, cần thiết để adapter chỉ bật
+  template OMR cho `LOAN_APPLICATION`; adapter không được đoán loại tài liệu từ
+  tên file.
 
 - **LLM Extraction Module** (`infra/llm/gemini_extractor.py`, implement
-  `LLMProvider`) — nhận danh sách OCRBlock (text + source_id) của một hồ sơ, gọi
-  Gemini API (Google AI Studio, free tier) với schema JSON đã định nghĩa sẵn
+  `LLMProvider`) — nhận danh sách document input, mỗi document gồm
+  `document_id`, `document_type` và các OCRBlock (text/checkbox selection +
+  source_id), gọi model `gemini-3.7-flash` qua SDK `google-genai==2.21.0` với
+  schema JSON đã định nghĩa sẵn
   (field_code, value, source_ids), và validate kết quả trả về bằng Pydantic. Model
   chỉ được chọn source_id có sẵn trong input, không được tự sinh toạ độ hay
   source_id mới. Field không tìm thấy dùng `value = null, source_ids = []`; field có value phải có ít nhất một source_id hợp lệ. Validate nghiêm trước khi lưu. Vì đây là API free tier có giới hạn request/phút, module này nên có cơ chế

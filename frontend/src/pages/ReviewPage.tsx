@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { getCaseReview, getDocumentFile } from '../api/client'
+import {
+  getCaseReview,
+  getDocumentFile,
+  updateReviewField,
+  uploadCase,
+} from '../api/client'
 import { DocumentViewer } from '../components/DocumentViewer'
 import { FieldList } from '../components/FieldList'
 import type {
@@ -17,6 +22,7 @@ type ReviewPageProps = {
 }
 
 type LoadState = 'loading' | 'loaded' | 'error'
+type UploadState = 'idle' | 'uploading' | 'error'
 
 type DocumentLoad = {
   documentId: string
@@ -46,7 +52,16 @@ export function ReviewPage({ caseId }: ReviewPageProps) {
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null)
   const [documentLoad, setDocumentLoad] = useState<DocumentLoad | null>(null)
+  const [pendingFieldIds, setPendingFieldIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  )
+  const [fieldSaveErrors, setFieldSaveErrors] = useState<ReadonlySet<string>>(
+    new Set(),
+  )
+  const [uploadState, setUploadState] = useState<UploadState>('idle')
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const documentCache = useRef(new Map<string, DocumentFile>())
+  const pendingSaves = useRef(new Set<string>())
 
   useEffect(() => {
     let isActive = true
@@ -150,6 +165,73 @@ export function ReviewPage({ caseId }: ReviewPageProps) {
     setActiveSourceId(field.sources[0]?.ocr_block_id ?? null)
   }
 
+  async function handleSaveField(
+    field: ReviewField,
+    currentValue: string | null,
+  ) {
+    pendingSaves.current.add(field.id)
+    setPendingFieldIds(new Set(pendingSaves.current))
+    setFieldSaveErrors((currentErrors) => {
+      const nextErrors = new Set(currentErrors)
+      nextErrors.delete(field.id)
+      return nextErrors
+    })
+
+    try {
+      const updatedField = await updateReviewField(
+        field.case_id,
+        field.id,
+        currentValue,
+      )
+      setReview((currentReview) =>
+        currentReview === null
+          ? null
+          : {
+              ...currentReview,
+              fields: currentReview.fields.map((currentField) =>
+                currentField.id === updatedField.id
+                  ? { ...currentField, ...updatedField }
+                  : currentField,
+              ),
+            },
+      )
+    } catch (error: unknown) {
+      setFieldSaveErrors((currentErrors) =>
+        new Set(currentErrors).add(field.id),
+      )
+      throw error
+    } finally {
+      pendingSaves.current.delete(field.id)
+      setPendingFieldIds(new Set(pendingSaves.current))
+    }
+  }
+
+  async function handleUploadCase() {
+    if (
+      review === null ||
+      review.status === 'COMPLETED' ||
+      pendingSaves.current.size > 0 ||
+      fieldSaveErrors.size > 0
+    ) {
+      return
+    }
+
+    setUploadState('uploading')
+    setUploadError(null)
+    try {
+      const completedCase = await uploadCase(review.case_id)
+      setReview((currentReview) =>
+        currentReview === null
+          ? null
+          : { ...currentReview, status: completedCase.status },
+      )
+      setUploadState('idle')
+    } catch (error: unknown) {
+      setUploadState('error')
+      setUploadError(getErrorText(error))
+    }
+  }
+
   const activeDocumentLoad =
     selection !== null && documentLoad?.documentId === selection.documentId
       ? documentLoad
@@ -182,14 +264,47 @@ export function ReviewPage({ caseId }: ReviewPageProps) {
           <h1>Kiểm tra thông tin hồ sơ</h1>
           <p className="review-page__case-id">Mã hồ sơ: {review.case_id}</p>
         </div>
-        <span className="status-badge">{review.status}</span>
+        <div className="review-page__actions">
+          <span className="status-badge">{review.status}</span>
+          <button
+            type="button"
+            onClick={() => void handleUploadCase()}
+            disabled={
+              review.status === 'COMPLETED' ||
+              uploadState === 'uploading' ||
+              pendingFieldIds.size > 0 ||
+              fieldSaveErrors.size > 0
+            }
+          >
+            {review.status === 'COMPLETED'
+              ? 'Đã Upload'
+              : uploadState === 'uploading'
+                ? 'Đang Upload...'
+                : 'Upload hồ sơ'}
+          </button>
+          {pendingFieldIds.size > 0 ? (
+            <span className="review-page__action-status" role="status">
+              Đang lưu {pendingFieldIds.size} thay đổi...
+            </span>
+          ) : fieldSaveErrors.size > 0 ? (
+            <span className="review-page__action-error" role="alert">
+              Còn thay đổi lưu lỗi. Hãy sửa hoặc thử lưu lại trước khi Upload.
+            </span>
+          ) : uploadError !== null ? (
+            <span className="review-page__action-error" role="alert">
+              {uploadError}
+            </span>
+          ) : null}
+        </div>
       </header>
 
       <div className="review-workspace">
         <FieldList
           fields={review.fields}
           selectedFieldId={selectedFieldId}
+          isEditable={review.status === 'READY_FOR_REVIEW'}
           onSelectField={handleSelectField}
+          onSaveField={handleSaveField}
         />
 
         <section className="review-evidence" aria-labelledby="evidence-title">

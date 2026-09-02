@@ -6,13 +6,20 @@ import './FieldList.css'
 export type FieldListProps = {
   fields: readonly ReviewField[]
   selectedFieldId: string | null
+  isEditable: boolean
   onSelectField: (field: ReviewField) => void
+  onSaveField: (
+    field: ReviewField,
+    currentValue: string | null,
+  ) => Promise<void>
 }
 
 export function FieldList({
   fields,
   selectedFieldId,
+  isEditable,
   onSelectField,
+  onSaveField,
 }: FieldListProps) {
   return (
     <section className="field-list" aria-labelledby="field-list-title">
@@ -33,7 +40,9 @@ export function FieldList({
             field={field}
             label={getFieldLabel(field.field_code)}
             isSelected={field.id === selectedFieldId}
+            isEditable={isEditable}
             onSelect={onSelectField}
+            onSave={onSaveField}
           />
         ))}
       </ul>

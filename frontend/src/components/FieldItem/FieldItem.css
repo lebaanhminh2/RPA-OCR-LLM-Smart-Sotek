@@ -7,9 +7,9 @@
   padding: 0.75rem;
   color: #172033;
   background: transparent;
-  text-align: left;
 }
 
+.field-item:focus-within,
 .field-item:hover {
   background: #f3f7fd;
 }
@@ -20,24 +20,78 @@
   box-shadow: inset 3px 0 #1859c9;
 }
 
+.field-item__content {
+  display: grid;
+  gap: 0.3rem;
+}
+
 .field-item__label {
   color: #536174;
   font-size: 0.78rem;
   font-weight: 700;
 }
 
-.field-item__value {
-  overflow-wrap: anywhere;
+.field-item__input {
+  width: 100%;
+  border: 1px solid #cbd7e8;
+  border-radius: 0.45rem;
+  padding: 0.5rem 0.6rem;
+  color: #172033;
+  background: #fff;
   font-weight: 600;
 }
 
-.field-item__value--empty {
+.field-item__input::placeholder {
   color: #7a8799;
   font-style: italic;
   font-weight: 400;
 }
 
-.field-item__evidence {
+.field-item__input:focus {
+  border-color: #1859c9;
+  outline: 2px solid rgb(24 89 201 / 15%);
+}
+
+.field-item__input:disabled {
+  color: #536174;
+  background: #f3f5f8;
+}
+
+.field-item__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.field-item__evidence-button {
+  min-width: 0;
+  padding: 0;
   color: #718096;
+  background: transparent;
   font-size: 0.72rem;
+  text-align: left;
+}
+
+.field-item__evidence-button:hover {
+  color: #1859c9;
+  text-decoration: underline;
+}
+
+.field-item__save-status {
+  color: #718096;
+  font-size: 0.7rem;
+  text-align: right;
+}
+
+.field-item__save-status--saving {
+  color: #174a98;
+}
+
+.field-item__save-status--success {
+  color: #167247;
+}
+
+.field-item__save-status--error {
+  color: #a32626;
 }

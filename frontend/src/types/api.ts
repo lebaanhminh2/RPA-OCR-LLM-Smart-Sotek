@@ -12,6 +12,8 @@ export type Case = {
   updated_at: string
 }
 
+export type CompletedCase = Omit<Case, 'status'> & { status: 'COMPLETED' }
+
 export type DocumentType =
   | 'CCCD_FRONT'
   | 'CCCD_BACK'
@@ -54,6 +56,11 @@ export type CaseReview = {
   status: Extract<CaseStatus, 'READY_FOR_REVIEW' | 'COMPLETED'>
   fields: ReviewField[]
 }
+
+export type UpdatedReviewField = Pick<
+  ReviewField,
+  'id' | 'case_id' | 'field_code' | 'original_value' | 'current_value'
+>
 
 export type DocumentFile = {
   blob: Blob

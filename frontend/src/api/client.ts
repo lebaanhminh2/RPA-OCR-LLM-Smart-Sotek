@@ -1,9 +1,11 @@
 import type {
   Case,
   CaseReview,
+  CompletedCase,
   Document,
   DocumentFile,
   DocumentType,
+  UpdatedReviewField,
 } from '../types/api'
 
 const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000'
@@ -90,6 +92,30 @@ export async function getCaseReview(caseId: string): Promise<CaseReview> {
     `${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/review`,
   )
   return parseResponse<CaseReview>(response)
+}
+
+export async function updateReviewField(
+  caseId: string,
+  fieldId: string,
+  currentValue: string | null,
+): Promise<UpdatedReviewField> {
+  const response = await fetch(
+    `${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/fields/${encodeURIComponent(fieldId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_value: currentValue }),
+    },
+  )
+  return parseResponse<UpdatedReviewField>(response)
+}
+
+export async function uploadCase(caseId: string): Promise<CompletedCase> {
+  const response = await fetch(
+    `${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/upload`,
+    { method: 'POST' },
+  )
+  return parseResponse<CompletedCase>(response)
 }
 
 export async function getDocumentFile(

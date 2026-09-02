@@ -28,6 +28,28 @@
   overflow-wrap: anywhere;
 }
 
+.review-page__actions {
+  display: grid;
+  justify-items: end;
+  gap: 0.5rem;
+}
+
+.review-page__actions button {
+  min-width: 9rem;
+}
+
+.review-page__action-status,
+.review-page__action-error {
+  max-width: 25rem;
+  color: #536174;
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.review-page__action-error {
+  color: #a32626;
+}
+
 .review-page__error {
   width: min(100%, 36rem);
   border-radius: 0.75rem;
@@ -131,6 +153,10 @@
 
   .review-page__header {
     align-items: flex-start;
+  }
+
+  .review-page__actions {
+    justify-items: stretch;
   }
 
   .review-workspace {

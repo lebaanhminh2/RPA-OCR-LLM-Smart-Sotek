@@ -139,7 +139,11 @@ xử lý, chờ xác nhận.
 
 - **PaddleOCR/VietOCR:** model weights load 1 lần khi khởi động app (không load
   lại mỗi request — rất tốn thời gian). API key/đường dẫn model không hard-code
-  trong source code, đọc từ biến môi trường/file cấu hình.
+  trong source code, đọc từ biến môi trường/file cấu hình. Runtime production
+  chuẩn dùng PaddlePaddle CPU-only cho detection và VietOCR/PyTorch ở chế độ
+  `auto`: ưu tiên `cuda:0`, fallback CPU khi GPU không khả dụng. Không chuyển
+  Paddle sang GPU hoặc ghép các runtime cuDNN khác phiên bản trong cùng process
+  nếu chưa có compatibility test và approval mới.
 - **Gemini API:** vì dùng free tier có giới hạn request/phút, adapter gọi
   Gemini phải có retry/backoff đơn giản khi gặp lỗi rate-limit (429), và không
   được gọi lặp vô hạn — giới hạn số lần retry rõ ràng.

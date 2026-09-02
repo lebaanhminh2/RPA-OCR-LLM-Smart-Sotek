@@ -1,3 +1,4 @@
+import logging
 import math
 import os
 from collections.abc import (
@@ -31,13 +32,14 @@ PDF_RENDER_SCALE = 2.0
 TEXT_DETECTION_BATCH_SIZE = 2
 TEXT_RECOGNITION_BATCH_SIZE = 16
 RECOGNITION_DEVICE_ENV = "OCR_RECOGNITION_DEVICE"
-SUPPORTED_RECOGNITION_DEVICES = frozenset({"cpu", "cuda:0"})
+SUPPORTED_RECOGNITION_DEVICES = frozenset({"auto", "cpu", "cuda:0"})
 LOAN_TEMPLATE_PATH_ENV = "OCR_LOAN_APPLICATION_TEMPLATE_PATH"
 LOAN_TEMPLATE_CONFIG = (
     Path(__file__).resolve().parent
     / "templates"
     / "loan_application_v1.json"
 )
+LOGGER = logging.getLogger(__name__)
 
 
 class LocalOCRError(RuntimeError):
@@ -140,7 +142,7 @@ def _cuda_is_available() -> bool:
 def _resolve_recognition_device(configured_device: str | None = None) -> str:
     raw_device = configured_device
     if raw_device is None:
-        raw_device = os.getenv(RECOGNITION_DEVICE_ENV, "cpu")
+        raw_device = os.getenv(RECOGNITION_DEVICE_ENV, "auto")
     device = raw_device.strip().lower()
     if device not in SUPPORTED_RECOGNITION_DEVICES:
         supported = ", ".join(sorted(SUPPORTED_RECOGNITION_DEVICES))
@@ -148,6 +150,8 @@ def _resolve_recognition_device(configured_device: str | None = None) -> str:
             f"Unsupported {RECOGNITION_DEVICE_ENV} value: {raw_device!r}. "
             f"Expected one of: {supported}."
         )
+    if device == "auto":
+        return "cuda:0" if _cuda_is_available() else "cpu"
     if device == "cuda:0" and not _cuda_is_available():
         raise OCRConfigurationError(
             f"{RECOGNITION_DEVICE_ENV}=cuda:0 requires a CUDA-enabled "
@@ -434,6 +438,7 @@ class LocalOCRAdapter(OCRProvider):
             resolved_root
         )
         resolved_device = _resolve_recognition_device(recognition_device)
+        LOGGER.info("VietOCR recognition device selected: %s", resolved_device)
         self._detector = _load_detector(paddle_dir)
         self._recognizer = _load_recognizer(
             config_path,

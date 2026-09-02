@@ -202,6 +202,7 @@ def test_model_loaders_are_called_once_during_initialization(
 
     monkeypatch.setattr(ocr, "_load_detector", load_detector)
     monkeypatch.setattr(ocr, "_load_recognizer", load_recognizer)
+    monkeypatch.setattr(ocr, "_cuda_is_available", lambda: False)
 
     LocalOCRAdapter(model_root)
 
@@ -235,21 +236,30 @@ def test_paddle_loader_uses_local_model_directory_and_cpu(tmp_path: Path) -> Non
     assert calls == [(str(model_dir), "cpu", False)]
 
 
-def test_recognition_device_defaults_to_cpu(
+def test_recognition_device_defaults_to_cuda_when_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv(ocr.RECOGNITION_DEVICE_ENV, raising=False)
+    monkeypatch.setattr(ocr, "_cuda_is_available", lambda: True)
+
+    assert ocr._resolve_recognition_device() == "cuda:0"
+
+
+def test_recognition_device_auto_falls_back_to_cpu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(ocr.RECOGNITION_DEVICE_ENV, "AUTO")
+    monkeypatch.setattr(ocr, "_cuda_is_available", lambda: False)
 
     assert ocr._resolve_recognition_device() == "cpu"
 
 
-def test_recognition_device_uses_configured_cuda(
+def test_recognition_device_can_force_cpu(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(ocr.RECOGNITION_DEVICE_ENV, "CUDA:0")
     monkeypatch.setattr(ocr, "_cuda_is_available", lambda: True)
 
-    assert ocr._resolve_recognition_device() == "cuda:0"
+    assert ocr._resolve_recognition_device("cpu") == "cpu"
 
 
 def test_recognition_device_rejects_unavailable_cuda(
@@ -263,7 +273,7 @@ def test_recognition_device_rejects_unavailable_cuda(
 
 def test_recognition_device_rejects_unknown_value() -> None:
     with pytest.raises(OCRConfigurationError, match="Unsupported"):
-        ocr._resolve_recognition_device("auto")
+        ocr._resolve_recognition_device("gpu")
 
 
 def test_vietocr_loader_uses_requested_local_device(tmp_path: Path) -> None:

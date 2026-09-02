@@ -22,24 +22,29 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -PythonExecutable "C:\path\to\venv\Scripts\python.exe"
 ```
 
-The default bootstrap installs CPU-only PaddlePaddle and CPU-only PyTorch.
-For the validated hybrid mode (Paddle detection on CPU and VietOCR recognition
-on an NVIDIA GPU), add the GPU switch:
+The default bootstrap installs the validated hybrid runtime: Paddle detection
+uses CPU-only PaddlePaddle, while VietOCR recognition uses the official PyTorch
+2.2.1 CUDA 11.8 wheel. Keep `OCR_RECOGNITION_DEVICE=auto` so VietOCR selects
+`cuda:0` when a compatible NVIDIA GPU is available and falls back to CPU when
+it is not.
+
+For a smaller portable installation that never uses an NVIDIA GPU, add the
+CPU-only switch:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File ".\backend\scripts\install_ocr_dependencies.ps1" `
   -PythonExecutable "C:\path\to\venv\Scripts\python.exe" `
-  -EnableVietOcrGpu
+  -CpuOnly
 ```
 
-Hybrid mode installs the official PyTorch 2.2.1 CUDA 11.8 wheels while keeping
-PaddlePaddle CPU-only. This separation avoids loading incompatible Paddle and
-PyTorch cuDNN runtimes in the same backend process. Set
-`OCR_RECOGNITION_DEVICE=cuda:0` only in an environment bootstrapped with the GPU
-switch. The backend fails during startup if CUDA was requested but is not
-available; it does not silently fall back to slow CPU recognition. Leave the
-variable unset or set it to `cpu` for the portable CPU mode.
+Keeping PaddlePaddle CPU-only avoids loading incompatible Paddle and PyTorch
+cuDNN runtimes in the same backend process. `OCR_RECOGNITION_DEVICE=cpu` forces
+portable CPU recognition; `cuda:0` is a strict diagnostic mode that fails at
+startup if CUDA is unavailable. On the validated GTX 1650 development machine,
+the hybrid pipeline processes the representative four-document workload in
+roughly 2-3 minutes. CPU fallback remains functional but is substantially
+slower; this timing is an operational estimate, not a hard SLA.
 
 The script installs the base requirements, applies the approved OCR package
 order, runs `pip check`, and verifies the exact critical package and OpenCV

@@ -689,7 +689,11 @@ Viết test khởi tạo model với dữ liệu hợp lệ.
 **Files/modules:** `backend/app/infra/ocr/local_ocr_adapter.py`.
 
 **Requirements:**
-- PaddleOCR detect vùng chữ → cắt vùng → VietOCR recognize nội dung.
+- PaddleOCR chạy CPU để detect vùng chữ → cắt vùng → VietOCR recognize nội
+  dung. `OCR_RECOGNITION_DEVICE=auto` là mặc định: ưu tiên `cuda:0` khi GPU
+  tương thích khả dụng và fallback CPU nếu không có GPU.
+- Runtime hybrid chuẩn dùng PaddlePaddle CPU-only và PyTorch CUDA 11.8; không
+  đưa Paddle lên GPU trong cùng process vì tổ hợp cuDNN đã thử không tương thích.
 - Model weights load 1 lần lúc khởi động app, không load lại mỗi request
   (DEVELOPMENT_RULES.md §14).
 - Đường dẫn model đọc từ biến môi trường/file cấu hình, không hard-code.
@@ -701,6 +705,8 @@ Viết test khởi tạo model với dữ liệu hợp lệ.
       bbox chuẩn hoá 0–1, confidence).
 - [ ] Model load 1 lần, không load lại mỗi lần gọi adapter trong cùng
       process.
+- [ ] Chế độ `auto` chọn GPU khi khả dụng và fallback CPU khi không khả dụng;
+      vẫn cho phép ép `cpu` hoặc strict `cuda:0` để vận hành/chẩn đoán.
 
 **Tests required:** Adapter test dùng fixture ảnh mẫu cố định
 (DEVELOPMENT_RULES.md §8).
@@ -715,8 +721,10 @@ dependency ngoài stack đã chốt mà chưa xin xác nhận.
 Đọc docs/ARCHITECTURE.md mục 1 và mục 6 (OCR Module), DATA_MODEL.md mục 4.3, và
 DEVELOPMENT_RULES.md mục 14 trước khi làm. Trong
 app/infra/ocr/local_ocr_adapter.py, implement interface OCRProvider: dùng
-PaddleOCR để detect vùng chữ (bounding box + confidence), cắt từng vùng và
+PaddleOCR CPU để detect vùng chữ (bounding box + confidence), cắt từng vùng và
 đưa qua VietOCR để nhận dạng nội dung chữ tiếng Việt (kể cả chữ viết tay).
+Mặc định dùng OCR_RECOGNITION_DEVICE=auto: chọn cuda:0 nếu PyTorch thấy GPU
+tương thích, nếu không thì fallback CPU; hỗ trợ cpu và strict cuda:0 làm override.
 Convert kết quả thành danh sách OCRBlock nội bộ - tự sinh id làm source_id
 (không dùng ID nội bộ của PaddleOCR), bbox chuẩn hoá theo tỉ lệ trang
 (0.0-1.0), không dùng pixel tuyệt đối. Model weights của PaddleOCR/VietOCR
@@ -1643,11 +1651,16 @@ Không xoá hay ẩn dữ liệu field sau khi Upload.
 **Requirements:**
 - Hiển thị loading khi `status = PROCESSING` (polling đơn giản theo
   ARCHITECTURE.md §8).
+- Nói rõ pipeline OCR + Gemini thường mất khoảng 2–3 phút trên cấu hình GPU
+  chuẩn, trang sẽ tự cập nhật; không hiển thị phần trăm giả khi backend chỉ có
+  trạng thái tổng `PROCESSING`.
 - Hiển thị thông báo lỗi rõ ràng khi `status = FAILED`.
 
 **Acceptance criteria:**
 - [ ] Case đang `PROCESSING` → UI hiển thị trạng thái đang xử lý, không trắng
       trang hay treo im lặng.
+- [ ] Loading có chuyển động trực quan, thông báo thời gian dự kiến và hỗ trợ
+      accessibility; polling vẫn tiếp tục cho tới trạng thái kết thúc.
 - [ ] Case `FAILED` → UI hiển thị lỗi rõ ràng.
 
 **Tests required:** Kiểm tra thủ công theo Acceptance criteria (có thể giả
@@ -1663,10 +1676,12 @@ theo ARCHITECTURE.md §9.
 Đọc docs/ARCHITECTURE.md mục 8 (polling, không dùng WebSocket) và mục 9 trước khi
 làm. Trong CaseUploadPage.tsx và ReviewPage.tsx, thêm xử lý hiển thị trạng
 thái Case.status rõ ràng cho người dùng: khi PROCESSING, hiển thị loading/
-trạng thái "đang xử lý", dùng polling đơn giản (gọi lại API định kỳ, không
-dùng WebSocket) để biết khi nào chuyển sang READY_FOR_REVIEW; khi FAILED,
-hiển thị thông báo lỗi rõ ràng thay vì trang trắng hoặc treo im lặng. Kiểm tra
-thủ công cả 2 trạng thái.
+trạng thái "đang xử lý", spinner và thông báo pipeline thường mất khoảng 2–3
+phút trên cấu hình GPU chuẩn; dùng polling đơn giản (gọi lại API định kỳ, không
+dùng WebSocket) để biết khi nào chuyển sang READY_FOR_REVIEW. Không dựng phần
+trăm giả vì backend chưa có progress theo stage. Khi FAILED, hiển thị thông báo
+lỗi rõ ràng thay vì trang trắng hoặc treo im lặng. Kiểm tra thủ công cả 2 trạng
+thái.
 ```
 
 ---

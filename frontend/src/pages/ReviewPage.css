@@ -59,12 +59,20 @@
 }
 
 .review-page__waiting {
+  display: grid;
+  justify-items: center;
   width: min(100%, 36rem);
   border-radius: 0.75rem;
   padding: 1.5rem;
   color: #174a98;
   background: #edf4ff;
   text-align: center;
+}
+
+.review-page__spinner {
+  width: 2rem;
+  height: 2rem;
+  margin-bottom: 0.75rem;
 }
 
 .review-page__waiting p:last-child {

@@ -234,10 +234,20 @@ export function CaseUploadPage() {
               <strong className="status-badge">{currentCase.status}</strong>
             </div>
             {currentCase.status === 'PROCESSING' ? (
-              <p className="processing-message">
-                Hồ sơ đang được OCR và trích xuất thông tin. Trang này sẽ tự
-                cập nhật khi hoàn tất.
-              </p>
+              <div
+                className="processing-message"
+                role="status"
+                aria-live="polite"
+              >
+                <span className="processing-spinner" aria-hidden="true" />
+                <div>
+                  <strong>Đang OCR và trích xuất thông tin</strong>
+                  <span>
+                    Thường mất khoảng 2–3 phút trên cấu hình chuẩn. Trang này
+                    sẽ tự cập nhật khi hoàn tất.
+                  </span>
+                </div>
+              </div>
             ) : null}
             {currentCase.status === 'READY_FOR_REVIEW' ? (
               <div className="case-ready-message">

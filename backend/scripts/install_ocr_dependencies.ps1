@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$PythonExecutable,
 
-    [switch]$EnableVietOcrGpu
+    [switch]$CpuOnly
 )
 
 Set-StrictMode -Version Latest
@@ -59,18 +59,18 @@ Invoke-CheckedPython -Arguments @(
     "--no-build-isolation",
     "imgaug==0.4.0"
 )
-if ($EnableVietOcrGpu) {
+if ($CpuOnly) {
+    Invoke-CheckedPython -Arguments @(
+        "-m", "pip", "install",
+        "torch==2.2.1",
+        "torchvision==0.17.1"
+    )
+} else {
     Invoke-CheckedPython -Arguments @(
         "-m", "pip", "install",
         "torch==2.2.1+cu118",
         "torchvision==0.17.1+cu118",
         "--index-url", "https://download.pytorch.org/whl/cu118"
-    )
-} else {
-    Invoke-CheckedPython -Arguments @(
-        "-m", "pip", "install",
-        "torch==2.2.1",
-        "torchvision==0.17.1"
     )
 }
 Invoke-CheckedPython -Arguments @(
@@ -81,10 +81,10 @@ Invoke-CheckedPython -Arguments @(
 )
 Invoke-CheckedPython -Arguments @("-m", "pip", "check")
 
-$env:SMART_SOTEK_OCR_BOOTSTRAP_MODE = if ($EnableVietOcrGpu) {
-    "gpu"
-} else {
+$env:SMART_SOTEK_OCR_BOOTSTRAP_MODE = if ($CpuOnly) {
     "cpu"
+} else {
+    "hybrid"
 }
 
 $verificationCode = @'
@@ -92,15 +92,15 @@ import importlib.metadata as metadata
 import os
 import re
 
-gpu_enabled = os.environ["SMART_SOTEK_OCR_BOOTSTRAP_MODE"] == "gpu"
+hybrid_enabled = os.environ["SMART_SOTEK_OCR_BOOTSTRAP_MODE"] == "hybrid"
 expected_versions = {
     "setuptools": "81.0.0",
     "paddleocr": "3.7.0",
     "paddlepaddle": "3.3.1",
     "paddlex": "3.7.2",
     "vietocr": "0.3.12",
-    "torch": "2.2.1+cu118" if gpu_enabled else "2.2.1",
-    "torchvision": "0.17.1+cu118" if gpu_enabled else "0.17.1",
+    "torch": "2.2.1+cu118" if hybrid_enabled else "2.2.1",
+    "torchvision": "0.17.1+cu118" if hybrid_enabled else "0.17.1",
     "numpy": "1.26.4",
     "Pillow": "10.2.0",
     "imgaug": "0.4.0",
@@ -163,27 +163,29 @@ if paddle.device.is_compiled_with_cuda():
         "The hybrid OCR environment requires CPU-only PaddlePaddle."
     )
 
-if gpu_enabled:
+if hybrid_enabled:
     if torch.version.cuda != "11.8":
         raise RuntimeError(
             f"PyTorch CUDA runtime {torch.version.cuda!r} installed; "
             "expected '11.8'."
         )
-    if not torch.cuda.is_available():
-        raise RuntimeError(
-            "PyTorch CUDA 11.8 is installed, but no NVIDIA GPU is available."
-        )
-    probe = torch.tensor([2.0, 3.0], device="cuda") * 2
-    torch.cuda.synchronize()
-    if probe.cpu().tolist() != [4.0, 6.0]:
-        raise RuntimeError("PyTorch CUDA tensor verification failed.")
+    if torch.cuda.is_available():
+        probe = torch.tensor([2.0, 3.0], device="cuda") * 2
+        torch.cuda.synchronize()
+        if probe.cpu().tolist() != [4.0, 6.0]:
+            raise RuntimeError("PyTorch CUDA tensor verification failed.")
+        selected_device = "cuda:0"
+    else:
+        selected_device = "cpu (automatic fallback)"
 elif torch.version.cuda is not None:
     raise RuntimeError(
         f"CPU bootstrap installed a CUDA runtime: {torch.version.cuda}."
     )
+else:
+    selected_device = "cpu"
 
 print("OCR dependency verification passed.")
-print(f"VietOCR device mode: {'cuda:0' if gpu_enabled else 'cpu'}")
+print(f"VietOCR device mode: {selected_device}")
 print(f"OpenCV distributions: {opencv_distributions!r}")
 print(f"imgaug OpenCV Requires-Dist: {imgaug_opencv_requirements!r}")
 '@

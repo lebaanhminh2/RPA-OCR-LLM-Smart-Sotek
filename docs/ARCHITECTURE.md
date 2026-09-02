@@ -10,7 +10,7 @@
 | Frontend | Vite + React + TypeScript + PDF.js | Vite cho dev/build đơn giản; React + TypeScript phù hợp Review UI; PDF.js render PDF và hỗ trợ overlay highlight theo bbox. |
 | Backend | Python + FastAPI + Pydantic | Đúng đề xuất ban đầu. Pydantic giúp validate dữ liệu OCR/LLM (vốn có schema phức tạp: block, bbox, field, source_id) một cách chặt chẽ. |
 | Database / persistence | SQLite + SQLAlchemy 2.x | SQLite phù hợp MVP local; SQLAlchemy 2.x giúp schema/repository rõ ràng và dễ chuyển sang PostgreSQL sau này mà không đổi domain logic. |
-| OCR provider | **Tự host, miễn phí: PaddleOCR (text detection) + VietOCR (nhận dạng tiếng Việt) + local template OMR cho checkbox** | PaddleOCR (mã nguồn mở, Apache 2.0) tìm vùng chữ và trả về bounding box + confidence; VietOCR (`pbcquoc/vietocr`) nhận dạng tiếng Việt trên từng vùng đã detect. Checkbox trên biểu mẫu cố định được đọc bằng OpenCV template OMR trong cùng local adapter, không giao cho OCR text hoặc Gemini suy đoán. Cả ba bước chạy local. **Rủi ro cần thử nghiệm sớm:** không giả định chất lượng chữ viết tay/ảnh chụp sẽ đạt yêu cầu; phải benchmark trên dữ liệu synthetic đại diện và fail closed khi confidence không đạt. |
+| OCR provider | **Tự host, miễn phí: PaddleOCR (text detection) + VietOCR (nhận dạng tiếng Việt) + local template OMR cho checkbox** | PaddleOCR CPU tìm vùng chữ và trả về bounding box + confidence; VietOCR ưu tiên GPU qua PyTorch CUDA và tự fallback CPU nếu GPU không khả dụng. Checkbox trên biểu mẫu cố định được đọc bằng OpenCV template OMR trong cùng local adapter, không giao cho OCR text hoặc Gemini suy đoán. Cả ba bước chạy local. **Rủi ro cần thử nghiệm sớm:** không giả định chất lượng chữ viết tay/ảnh chụp sẽ đạt yêu cầu; phải benchmark trên dữ liệu synthetic đại diện và fail closed khi confidence không đạt. |
 | LLM provider | **Google Gemini API (Google AI Studio, free tier)** | Hỗ trợ tiếng Việt và structured output theo schema. Free-tier quota có thể thay đổi nên code phải xử lý rate-limit/retry có giới hạn; chỉ dùng dữ liệu synthetic cho demo. |
 
 Không đổi frontend/backend/DB so với đề xuất ban đầu vì đã hợp lý với quy mô MVP.
@@ -138,9 +138,10 @@ project-root/
 ## 6. Giải thích chi tiết các module chính
 
 - **OCR Module** (`infra/ocr/`, implement `OCRProvider`) — nhận file ảnh/PDF của
-  một document kèm `document_type` và chạy local: (1) PaddleOCR detection tìm
-  vùng chữ và toạ độ;
-  (2) VietOCR nhận dạng nội dung tiếng Việt trong từng vùng; (3) với
+  một document kèm `document_type` và chạy local: (1) PaddleOCR detection chạy
+  CPU để tìm vùng chữ và toạ độ; (2) VietOCR nhận dạng nội dung tiếng Việt
+  trong từng vùng, mặc định tự dùng `cuda:0` khi PyTorch thấy GPU tương thích và
+  fallback CPU nếu không có GPU; (3) với
   `LOAN_APPLICATION` thuộc template đã đăng ký, template OMR căn chỉnh trang và
   phân loại checkbox. Kết quả text và checkbox selection đều trở thành
   `OCRBlock` nội bộ có `block_kind`, page, bbox chuẩn hoá, confidence và
@@ -148,8 +149,12 @@ project-root/
   feature matching/homography và V2 có marker ID ở bốn góc; cả hai đều tinh
   chỉnh checkbox trong ROI cục bộ và fail closed nếu không đủ chắc chắn. Vì
   chạy local, module cần model weights PaddleOCR/VietOCR sẵn trên máy và không
-  gọi network khi xử lý. Đây là **nguồn sự thật duy nhất** cho mọi bounding box
-  trong hệ thống — LLM và các module khác không được tự tạo bbox.
+  gọi network khi xử lý. Runtime production chuẩn giữ PaddlePaddle CPU-only và
+  dùng PyTorch CUDA 11.8 cho VietOCR để tránh xung đột cuDNN trong cùng process.
+  `OCR_RECOGNITION_DEVICE=auto` là mặc định; `cpu` ép fallback và `cuda:0` là
+  chế độ strict phục vụ vận hành/chẩn đoán. Đây là **nguồn sự thật duy nhất**
+  cho mọi bounding box trong hệ thống — LLM và các module khác không được tự
+  tạo bbox.
 
   `OCRProvider.extract` nhận `document_id`, `document_type` và `file_path`.
   `document_type` là metadata orchestration đã có, cần thiết để adapter chỉ bật
@@ -236,8 +241,10 @@ quả cuối.
 
 ## 8. Xử lý bất đồng bộ ở MVP (không dùng queue)
 
-Sau khi upload đủ giấy tờ, việc chạy OCR + gọi LLM có thể mất vài giây đến vài
-chục giây — không nên chặn (block) request upload cho tới khi xong hết.
+Sau khi upload đủ giấy tờ, việc chạy OCR + gọi LLM thường mất khoảng 2–3 phút
+trên cấu hình GPU đã benchmark; thời gian thay đổi theo số trang và phần cứng,
+và CPU fallback sẽ chậm hơn đáng kể. Đây là ước lượng vận hành, không phải SLA.
+Pipeline không nên chặn (block) request upload cho tới khi xong hết.
 
 **Quyết định:** dùng `BackgroundTasks` sẵn có của FastAPI để chạy pipeline
 OCR → LLM ngầm sau khi nhận đủ document, kèm một trường trạng thái đơn giản trên
@@ -246,12 +253,13 @@ nào có thể chuyển sang Review Page.
 
 Lý do không dùng hàng đợi thật (Celery/RabbitMQ/Redis...): đúng như PROJECT_BRIEF
 đã loại khỏi MVP ("queue phức tạp"). Với quy mô demo vài hồ sơ, chạy nền trong
-cùng process là đủ, không cần thêm hạ tầng. Việc này càng hợp lý hơn vì OCR giờ
-chạy local trên CPU (PaddleOCR + VietOCR) — có thể mất vài giây tới hơn chục giây
-mỗi tài liệu, nên tuyệt đối không nên chặn request upload. Nếu sau này khối lượng
-hồ sơ tăng lên nhiều, đây là điểm có thể nâng cấp mà không phải đổi kiến trúc
-domain (vì `ExtractSvc` không quan tâm nó được gọi từ BackgroundTasks hay từ
-worker của queue thật).
+cùng process là đủ, không cần thêm hạ tầng. OCR chạy local theo cấu hình hybrid
+Paddle CPU + VietOCR GPU/CPU fallback và có thể mất vài phút cho cả hồ sơ, nên
+tuyệt đối không chặn request upload. Frontend polling trạng thái và phải hiển thị
+loading cùng thời gian dự kiến để người dùng biết pipeline vẫn hoạt động. Nếu
+sau này khối lượng hồ sơ tăng lên nhiều, đây là điểm có thể nâng cấp mà không
+phải đổi kiến trúc domain (vì `ExtractSvc` không quan tâm nó được gọi từ
+BackgroundTasks hay từ worker của queue thật).
 
 ## 9. Những gì KHÔNG xây trong MVP (kiến trúc)
 
@@ -267,9 +275,11 @@ worker của queue thật).
   buộc cho MVP — có thể thêm sau nếu cần, không ảnh hưởng kiến trúc code.
 - Không có real-time update qua WebSocket — trạng thái xử lý dùng polling đơn
   giản là đủ.
-- Không bắt buộc có GPU — PaddleOCR/VietOCR chạy CPU vẫn dùng được cho quy mô demo
-  vài hồ sơ (chỉ chậm hơn chạy GPU). Không cần tạo billing account/khai báo thẻ
-  tín dụng ở bất kỳ đâu trong MVP.
+- GPU NVIDIA tương thích là cấu hình production khuyến nghị để đạt thời gian
+  khoảng 2–3 phút đã benchmark. GPU không phải hard requirement: VietOCR tự
+  fallback CPU và pipeline vẫn dùng được, nhưng chậm hơn đáng kể. PaddleOCR luôn
+  chạy CPU trong cấu hình đã kiểm chứng. Không cần tạo billing account/khai báo
+  thẻ tín dụng ở bất kỳ đâu trong MVP.
 
 ---
 

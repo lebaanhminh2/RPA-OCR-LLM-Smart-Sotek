@@ -137,10 +137,53 @@ h1 {
 }
 
 .processing-message {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   grid-column: 1 / -1;
   margin-bottom: 0;
+  border-radius: 0.6rem;
+  padding: 0.75rem;
   color: #174a98;
-  font-weight: 600;
+  background: #edf4ff;
+}
+
+.processing-message div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.processing-message strong {
+  font-weight: 700;
+}
+
+.processing-message span:not(.processing-spinner) {
+  color: #365f96;
+  font-size: 0.85rem;
+}
+
+.processing-spinner,
+.review-page__spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: 0 0 auto;
+  border: 0.2rem solid #bfd4f4;
+  border-top-color: #1769c2;
+  border-radius: 50%;
+  animation: smart-sotek-spin 0.9s linear infinite;
+}
+
+@keyframes smart-sotek-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .processing-spinner,
+  .review-page__spinner {
+    animation: none;
+  }
 }
 
 .case-ready-message,

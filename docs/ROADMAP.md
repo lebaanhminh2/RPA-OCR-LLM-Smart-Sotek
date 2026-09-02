@@ -154,8 +154,9 @@ qua API hoặc log để kiểm tra bằng mắt.
 
 **Tasks:**
 - Backend: `infra/ocr/local_ocr_adapter.py` implement `OCRProvider` port —
-  gọi PaddleOCR (detect) rồi VietOCR (recognize), convert kết quả thành
-  `OCRBlock` nội bộ. Model weights load 1 lần lúc khởi động app
+  gọi PaddleOCR CPU (detect) rồi VietOCR (recognize), mặc định tự dùng GPU và
+  fallback CPU nếu GPU không khả dụng, convert kết quả thành `OCRBlock` nội bộ.
+  Model weights load 1 lần lúc khởi động app
   (DEVELOPMENT_RULES.md §14), không hard-code đường dẫn model.
 - Backend: repository lưu `OCRBlock` vào SQLite.
 - Backend: `extraction_service.py` (chỉ điều phối bước OCR ở milestone này) —
@@ -185,8 +186,9 @@ qua API hoặc log để kiểm tra bằng mắt.
 `local_ocr_adapter.py`.
 
 **Definition of Done:** Lint/test/typecheck pass. Demo được: upload đủ giấy
-tờ → sau vài giây/chục giây thấy `OCRBlock` xuất hiện trong DB với dữ liệu hợp
-lý.
+tờ → pipeline chạy nền theo runtime hybrid chuẩn, UI tiếp tục polling, và sau
+khoảng 2–3 phút trên cấu hình GPU đã benchmark thấy `OCRBlock` xuất hiện trong
+DB với dữ liệu hợp lý. CPU fallback được phép chậm hơn.
 
 **Out of scope:** LLM extraction, hiển thị OCR lên UI (M2 đã xong phần
 viewer, nhưng nối OCR thật vào viewer là việc của M5).
@@ -363,12 +365,14 @@ cho người dùng cuối) — đó là M7.
 
 **User-visible result:** Toàn bộ flow chạy mượt từ đầu đến cuối cho 1 hồ sơ
 demo, có phản hồi rõ ràng ở mọi bước chờ (OCR đang chạy, LLM đang chạy), và
-báo lỗi dễ hiểu nếu OCR/LLM thất bại.
+báo lỗi dễ hiểu nếu OCR/LLM thất bại. Khi `PROCESSING`, UI cho biết thời gian
+dự kiến khoảng 2–3 phút trên cấu hình chuẩn và tự cập nhật, không hiển thị phần
+trăm giả khi backend chưa cung cấp tiến độ theo stage.
 
 **Tasks:**
 - Frontend: hiển thị trạng thái `Case.status` rõ ràng (loading spinner khi
-  `PROCESSING`, thông báo lỗi khi `FAILED`), polling đơn giản theo
-  ARCHITECTURE.md §8.
+  `PROCESSING`, thời gian dự kiến, thông báo lỗi khi `FAILED`), polling đơn giản
+  theo ARCHITECTURE.md §8.
 - Backend: đảm bảo mọi lỗi ở OCR/LLM đều được bắt và chuyển `Case.status →
   FAILED` thay vì để case "treo" (DATA_MODEL.md §3).
 - Rà lại toàn bộ acceptance criteria ở PROJECT_BRIEF.md §8 — checklist từng

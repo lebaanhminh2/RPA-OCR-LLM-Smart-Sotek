@@ -282,12 +282,13 @@ export function ReviewPage({ caseId }: ReviewPageProps) {
     return (
       <main className="review-page review-page--message">
         <section className="review-page__waiting" role="status">
+          <span className="review-page__spinner" aria-hidden="true" />
           <p className="eyebrow">Smart Sotek IDP · Processing</p>
           <h1>Hồ sơ đang được xử lý</h1>
           <p>
             {waitingStatus === 'UPLOADING'
               ? 'Hồ sơ chưa nhận đủ bốn giấy tờ bắt buộc.'
-              : 'OCR và Gemini đang trích xuất thông tin. Trang sẽ tự cập nhật khi hoàn tất.'}
+              : 'OCR và Gemini đang trích xuất thông tin. Quá trình thường mất khoảng 2–3 phút trên cấu hình chuẩn và trang sẽ tự cập nhật khi hoàn tất.'}
           </p>
         </section>
       </main>

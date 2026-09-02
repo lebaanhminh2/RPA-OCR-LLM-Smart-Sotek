@@ -13,6 +13,8 @@ from app.domain.models import (
     FieldSource,
     OCRBlock,
     OCRBlockKind,
+    ReviewAction,
+    ReviewActionType,
 )
 
 
@@ -135,6 +137,49 @@ def test_ocr_block_is_immutable() -> None:
 
     with pytest.raises(FrozenInstanceError):
         setattr(ocr_block, "bbox_x", 0.5)
+
+
+def test_review_action_models_edit_field_with_exact_fields() -> None:
+    created_at = datetime(2026, 9, 2, 10, 15, tzinfo=UTC)
+    action = ReviewAction(
+        id="action-001",
+        case_id="case-001",
+        extracted_field_id="field-ho-ten",
+        action_type=ReviewActionType.EDIT_FIELD,
+        previous_value="NGUYEN VAN A",
+        new_value="Nguyễn Văn A",
+        created_at=created_at,
+    )
+
+    assert action.action_type is ReviewActionType.EDIT_FIELD
+    assert action.previous_value == "NGUYEN VAN A"
+    assert action.new_value == "Nguyễn Văn A"
+    assert [field.name for field in fields(ReviewAction)] == [
+        "id",
+        "case_id",
+        "extracted_field_id",
+        "action_type",
+        "previous_value",
+        "new_value",
+        "created_at",
+    ]
+
+
+def test_review_action_models_upload_case_nullable_fields() -> None:
+    action = ReviewAction(
+        id="action-002",
+        case_id="case-001",
+        extracted_field_id=None,
+        action_type=ReviewActionType.UPLOAD_CASE,
+        previous_value=None,
+        new_value=None,
+        created_at=datetime(2026, 9, 2, 10, 20, tzinfo=UTC),
+    )
+
+    assert action.action_type is ReviewActionType.UPLOAD_CASE
+    assert action.extracted_field_id is None
+    assert action.previous_value is None
+    assert action.new_value is None
 
 
 def test_extracted_field_preserves_supplied_values_and_has_exact_fields() -> None:

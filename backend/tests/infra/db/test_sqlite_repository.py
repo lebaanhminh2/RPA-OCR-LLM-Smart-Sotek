@@ -16,8 +16,14 @@ from app.domain.models import (
     FieldSource,
     OCRBlock,
     OCRBlockKind,
+    ReviewAction,
+    ReviewActionType,
 )
-from app.domain.ports.repository import ExtractionRepository, Repository
+from app.domain.ports.repository import (
+    ExtractionRepository,
+    Repository,
+    ReviewRepository,
+)
 from app.infra.db.database import create_session_factory, create_sqlite_engine
 from app.infra.db.orm_models import Base
 from app.infra.db.sqlite_repository import SQLiteRepository
@@ -105,6 +111,28 @@ def make_extracted_field(
         current_value=value,
         created_at=timestamp,
         updated_at=timestamp,
+    )
+
+
+def make_review_action(
+    action_id: str,
+    case_id: str,
+    *,
+    extracted_field_id: str | None = None,
+    action_type: ReviewActionType = ReviewActionType.UPLOAD_CASE,
+    previous_value: str | None = None,
+    new_value: str | None = None,
+    created_at: datetime | None = None,
+) -> ReviewAction:
+    return ReviewAction(
+        id=action_id,
+        case_id=case_id,
+        extracted_field_id=extracted_field_id,
+        action_type=action_type,
+        previous_value=previous_value,
+        new_value=new_value,
+        created_at=created_at
+        or datetime(2026, 9, 1, 10, 30, tzinfo=UTC),
     )
 
 
@@ -577,6 +605,135 @@ def test_repository_exposes_no_field_source_update_or_delete_api() -> None:
         assert not hasattr(SQLiteRepository, method_name)
 
 
+def test_create_and_list_review_actions_by_case_id(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    first_case = make_case("case-001")
+    second_case = make_case("case-002")
+    field = make_extracted_field(
+        "field-001",
+        first_case.id,
+        "ho_ten",
+        "NGUYEN VAN A",
+    )
+    edit_action = make_review_action(
+        "action-001",
+        first_case.id,
+        extracted_field_id=field.id,
+        action_type=ReviewActionType.EDIT_FIELD,
+        previous_value="NGUYEN VAN A",
+        new_value="Nguyễn Văn A",
+    )
+    upload_action = make_review_action(
+        "action-002",
+        first_case.id,
+        created_at=edit_action.created_at + timedelta(minutes=1),
+    )
+    other_case_action = make_review_action("action-003", second_case.id)
+    repository.create_case(first_case)
+    repository.create_case(second_case)
+    repository.create_extracted_fields([field], [])
+
+    assert repository.create_review_action(edit_action) == edit_action
+    repository.create_review_action(upload_action)
+    repository.create_review_action(other_case_action)
+
+    assert repository.list_review_actions_by_case_id(first_case.id) == [
+        edit_action,
+        upload_action,
+    ]
+    assert repository.list_review_actions_by_case_id("missing-case") == []
+
+
+def test_update_extracted_field_and_audit_action_commit_together(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    case = make_case("case-001")
+    field = make_extracted_field(
+        "field-001",
+        case.id,
+        "ho_ten",
+        "NGUYEN VAN A",
+    )
+    updated_at = datetime(2026, 9, 1, 10, 45, tzinfo=UTC)
+    action = make_review_action(
+        "action-001",
+        case.id,
+        extracted_field_id=field.id,
+        action_type=ReviewActionType.EDIT_FIELD,
+        previous_value=field.current_value,
+        new_value="Nguyễn Văn A",
+        created_at=updated_at,
+    )
+    repository.create_case(case)
+    repository.create_extracted_fields([field], [])
+
+    result = repository.update_extracted_field_with_action(
+        field.id,
+        "Nguyễn Văn A",
+        updated_at,
+        action,
+    )
+
+    assert result is not None
+    updated_field, created_action = result
+    assert updated_field.original_value == "NGUYEN VAN A"
+    assert updated_field.current_value == "Nguyễn Văn A"
+    assert updated_field.updated_at == updated_at
+    assert created_action == action
+    assert repository.get_extracted_field(field.id) == updated_field
+    assert repository.list_review_actions_by_case_id(case.id) == [action]
+
+
+def test_complete_case_and_upload_action_commit_together(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    case = make_case("case-001")
+    ready_at = datetime(2026, 9, 1, 10, 0, tzinfo=UTC)
+    repository.create_case(case)
+    repository.update_case_status(
+        case.id,
+        CaseStatus.READY_FOR_REVIEW,
+        ready_at,
+    )
+    completed_at = datetime(2026, 9, 1, 11, 0)
+    action = make_review_action(
+        "action-upload",
+        case.id,
+        created_at=completed_at.replace(tzinfo=UTC),
+    )
+
+    result = repository.complete_case_with_action(
+        case.id,
+        completed_at,
+        action,
+    )
+
+    assert result is not None
+    completed_case, created_action = result
+    assert completed_case.status is CaseStatus.COMPLETED
+    assert completed_case.updated_at == completed_at
+    assert created_action == action
+    assert repository.get_case(case.id) == completed_case
+    assert repository.list_review_actions_by_case_id(case.id) == [action]
+
+
+def test_review_action_audit_log_exposes_no_update_or_delete_api() -> None:
+    forbidden_methods = {
+        "update_review_action",
+        "update_review_actions",
+        "delete_review_action",
+        "delete_review_actions",
+    }
+
+    for method_name in forbidden_methods:
+        assert not hasattr(ReviewRepository, method_name)
+        assert not hasattr(SQLiteRepository, method_name)
+
+
 def test_schema_has_only_required_tables_and_constraints(
     database: DatabaseFixture,
 ) -> None:
@@ -589,6 +746,7 @@ def test_schema_has_only_required_tables_and_constraints(
         "extracted_fields",
         "field_sources",
         "ocr_blocks",
+        "review_actions",
     }
 
     case_columns = {
@@ -606,6 +764,9 @@ def test_schema_has_only_required_tables_and_constraints(
     }
     field_source_columns = {
         column["name"] for column in inspector.get_columns("field_sources")
+    }
+    review_action_columns = {
+        column["name"] for column in inspector.get_columns("review_actions")
     }
     assert case_columns == {"id", "status", "created_at", "updated_at"}
     assert document_columns == {
@@ -644,6 +805,15 @@ def test_schema_has_only_required_tables_and_constraints(
         "extracted_field_id",
         "ocr_block_id",
     }
+    assert review_action_columns == {
+        "id",
+        "case_id",
+        "extracted_field_id",
+        "action_type",
+        "previous_value",
+        "new_value",
+        "created_at",
+    }
 
     assert inspector.get_pk_constraint("cases")["constrained_columns"] == [
         "id"
@@ -658,6 +828,9 @@ def test_schema_has_only_required_tables_and_constraints(
         "constrained_columns"
     ] == ["id"]
     assert inspector.get_pk_constraint("field_sources")[
+        "constrained_columns"
+    ] == ["id"]
+    assert inspector.get_pk_constraint("review_actions")[
         "constrained_columns"
     ] == ["id"]
 
@@ -697,6 +870,22 @@ def test_schema_has_only_required_tables_and_constraints(
     assert (
         field_source_foreign_keys["ocr_block_id"]["referred_table"]
         == "ocr_blocks"
+    )
+
+    review_action_foreign_keys = {
+        foreign_key["constrained_columns"][0]: foreign_key
+        for foreign_key in inspector.get_foreign_keys("review_actions")
+    }
+    assert set(review_action_foreign_keys) == {
+        "case_id",
+        "extracted_field_id",
+    }
+    assert (
+        review_action_foreign_keys["case_id"]["referred_table"] == "cases"
+    )
+    assert (
+        review_action_foreign_keys["extracted_field_id"]["referred_table"]
+        == "extracted_fields"
     )
 
     unique_constraints = inspector.get_unique_constraints("documents")

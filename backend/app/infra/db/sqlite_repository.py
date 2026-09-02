@@ -13,11 +13,12 @@ from app.domain.models import (
     ExtractedField,
     FieldSource,
     OCRBlock,
+    ReviewAction,
 )
 from app.domain.ports.repository import (
     ExtractedFieldWithSources,
-    ExtractionRepository,
     FieldSourceEvidence,
+    ReviewRepository,
 )
 from app.infra.db.orm_models import (
     CaseRecord,
@@ -25,6 +26,7 @@ from app.infra.db.orm_models import (
     ExtractedFieldRecord,
     FieldSourceRecord,
     OCRBlockRecord,
+    ReviewActionRecord,
 )
 
 
@@ -97,7 +99,31 @@ def _field_source_to_domain(record: FieldSourceRecord) -> FieldSource:
     )
 
 
-class SQLiteRepository(ExtractionRepository):
+def _review_action_to_domain(record: ReviewActionRecord) -> ReviewAction:
+    return ReviewAction(
+        id=record.id,
+        case_id=record.case_id,
+        extracted_field_id=record.extracted_field_id,
+        action_type=record.action_type,
+        previous_value=record.previous_value,
+        new_value=record.new_value,
+        created_at=_from_utc_storage(record.created_at),
+    )
+
+
+def _review_action_record(action: ReviewAction) -> ReviewActionRecord:
+    return ReviewActionRecord(
+        id=action.id,
+        case_id=action.case_id,
+        extracted_field_id=action.extracted_field_id,
+        action_type=action.action_type,
+        previous_value=action.previous_value,
+        new_value=action.new_value,
+        created_at=_to_utc_storage(action.created_at),
+    )
+
+
+class SQLiteRepository(ReviewRepository):
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
 
@@ -386,3 +412,101 @@ class SQLiteRepository(ExtractionRepository):
             ExtractedFieldWithSources(field=field, sources=tuple(sources))
             for field, sources in grouped.values()
         ]
+
+    def get_extracted_field(
+        self,
+        extracted_field_id: str,
+    ) -> ExtractedField | None:
+        with self._session_factory() as session:
+            record = session.get(ExtractedFieldRecord, extracted_field_id)
+            return (
+                _extracted_field_to_domain(record)
+                if record is not None
+                else None
+            )
+
+    def create_review_action(self, action: ReviewAction) -> ReviewAction:
+        record = _review_action_record(action)
+        with self._session_factory() as session:
+            session.add(record)
+            try:
+                session.commit()
+            except SQLAlchemyError:
+                session.rollback()
+                raise
+            session.refresh(record)
+            return _review_action_to_domain(record)
+
+    def list_review_actions_by_case_id(
+        self,
+        case_id: str,
+    ) -> list[ReviewAction]:
+        statement = (
+            select(ReviewActionRecord)
+            .where(ReviewActionRecord.case_id == case_id)
+            .order_by(
+                ReviewActionRecord.created_at,
+                ReviewActionRecord.id,
+            )
+        )
+        with self._session_factory() as session:
+            records = session.scalars(statement).all()
+            return [_review_action_to_domain(record) for record in records]
+
+    def update_extracted_field_with_action(
+        self,
+        extracted_field_id: str,
+        current_value: str | None,
+        updated_at: datetime,
+        action: ReviewAction,
+    ) -> tuple[ExtractedField, ReviewAction] | None:
+        with self._session_factory() as session:
+            field_record = session.get(
+                ExtractedFieldRecord,
+                extracted_field_id,
+            )
+            if field_record is None:
+                return None
+
+            field_record.current_value = current_value
+            field_record.updated_at = _to_utc_storage(updated_at)
+            action_record = _review_action_record(action)
+            session.add(action_record)
+            try:
+                session.commit()
+            except SQLAlchemyError:
+                session.rollback()
+                raise
+            session.refresh(field_record)
+            session.refresh(action_record)
+            return (
+                _extracted_field_to_domain(field_record),
+                _review_action_to_domain(action_record),
+            )
+
+    def complete_case_with_action(
+        self,
+        case_id: str,
+        updated_at: datetime,
+        action: ReviewAction,
+    ) -> tuple[Case, ReviewAction] | None:
+        with self._session_factory() as session:
+            case_record = session.get(CaseRecord, case_id)
+            if case_record is None:
+                return None
+
+            case_record.status = CaseStatus.COMPLETED
+            case_record.updated_at = _to_utc_storage(updated_at)
+            action_record = _review_action_record(action)
+            session.add(action_record)
+            try:
+                session.commit()
+            except SQLAlchemyError:
+                session.rollback()
+                raise
+            session.refresh(case_record)
+            session.refresh(action_record)
+            return (
+                _case_to_domain(case_record),
+                _review_action_to_domain(action_record),
+            )

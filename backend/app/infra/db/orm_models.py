@@ -17,6 +17,7 @@ from app.domain.models import (
     DocumentOcrStatus,
     DocumentType,
     OCRBlockKind,
+    ReviewActionType,
 )
 
 
@@ -143,5 +144,29 @@ class FieldSourceRecord(Base):
     )
     ocr_block_id: Mapped[str] = mapped_column(
         ForeignKey("ocr_blocks.id"),
+        nullable=False,
+    )
+
+
+class ReviewActionRecord(Base):
+    __tablename__ = "review_actions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(
+        ForeignKey("cases.id"),
+        nullable=False,
+    )
+    extracted_field_id: Mapped[str | None] = mapped_column(
+        ForeignKey("extracted_fields.id"),
+        nullable=True,
+    )
+    action_type: Mapped[ReviewActionType] = mapped_column(
+        Enum(ReviewActionType, native_enum=False),
+        nullable=False,
+    )
+    previous_value: Mapped[str | None] = mapped_column(String, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         nullable=False,
     )

@@ -11,6 +11,7 @@ from app.domain.models import (
     ExtractedField,
     FieldSource,
     OCRBlock,
+    ReviewAction,
 )
 
 
@@ -75,3 +76,32 @@ class ExtractionRepository(Repository, Protocol):
         self,
         case_id: str,
     ) -> list[ExtractedFieldWithSources]: ...
+
+
+class ReviewRepository(ExtractionRepository, Protocol):
+    def get_extracted_field(
+        self,
+        extracted_field_id: str,
+    ) -> ExtractedField | None: ...
+
+    def create_review_action(self, action: ReviewAction) -> ReviewAction: ...
+
+    def list_review_actions_by_case_id(
+        self,
+        case_id: str,
+    ) -> list[ReviewAction]: ...
+
+    def update_extracted_field_with_action(
+        self,
+        extracted_field_id: str,
+        current_value: str | None,
+        updated_at: datetime,
+        action: ReviewAction,
+    ) -> tuple[ExtractedField, ReviewAction] | None: ...
+
+    def complete_case_with_action(
+        self,
+        case_id: str,
+        updated_at: datetime,
+        action: ReviewAction,
+    ) -> tuple[Case, ReviewAction] | None: ...

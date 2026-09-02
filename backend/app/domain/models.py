@@ -29,6 +29,11 @@ class OCRBlockKind(str, Enum):
     CHECKBOX_SELECTION = "CHECKBOX_SELECTION"
 
 
+class ReviewActionType(str, Enum):
+    EDIT_FIELD = "EDIT_FIELD"
+    UPLOAD_CASE = "UPLOAD_CASE"
+
+
 @dataclass
 class Case:
     id: str
@@ -79,3 +84,14 @@ class FieldSource:
     id: str
     extracted_field_id: str
     ocr_block_id: str
+
+
+@dataclass(frozen=True)
+class ReviewAction:
+    id: str
+    case_id: str
+    extracted_field_id: str | None
+    action_type: ReviewActionType
+    previous_value: str | None
+    new_value: str | None
+    created_at: datetime

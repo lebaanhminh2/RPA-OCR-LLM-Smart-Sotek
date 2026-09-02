@@ -126,6 +126,7 @@ def test_extract_uses_document_aware_prompt_and_structured_output() -> None:
     assert result[0].source_ids == ["source-ho-ten"]
 
     call = generate_content.calls[0]
+    assert GEMINI_MODEL == "gemini-3.5-flash-lite"
     assert call["model"] == GEMINI_MODEL
     prompt = json.loads(cast(str, call["contents"]))
     assert prompt["documents"][0]["document_type"] == "CCCD_FRONT"

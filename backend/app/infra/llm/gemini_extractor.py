@@ -16,7 +16,7 @@ from app.domain.ports.llm_provider import (
     LLMProvider,
 )
 
-GEMINI_MODEL = "gemini-3.7-flash"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 _SYSTEM_INSTRUCTION = """
 Bạn trích xuất dữ liệu thô từ OCR của hồ sơ vay theo lương.

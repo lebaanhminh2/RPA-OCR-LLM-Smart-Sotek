@@ -218,7 +218,7 @@ và có thể xem qua API danh sách `ExtractedField` kèm `sources` (như ví d
 - `LLMProvider` nhận document-aware input (`document_id`, `document_type`,
   `blocks`) thay vì danh sách block bị mất ngữ cảnh nguồn.
 - Backend: `infra/llm/gemini_extractor.py` implement `LLMProvider` port — gọi
-  model `gemini-3.7-flash` qua `google-genai==2.21.0` với structured output
+  model `gemini-3.5-flash-lite` qua `google-genai==2.21.0` với structured output
   schema (`field_code`, `value`, `source_ids`), validate bằng Pydantic. Có
   retry/backoff giới hạn số lần khi gặp 429 (DEVELOPMENT_RULES.md §14).
 - Backend: validate nghiêm ở tầng domain — chặn nếu LLM trả về `source_id`

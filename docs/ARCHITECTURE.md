@@ -159,7 +159,7 @@ project-root/
 - **LLM Extraction Module** (`infra/llm/gemini_extractor.py`, implement
   `LLMProvider`) — nhận danh sách document input, mỗi document gồm
   `document_id`, `document_type` và các OCRBlock (text/checkbox selection +
-  source_id), gọi model `gemini-3.7-flash` qua SDK `google-genai==2.21.0` với
+  source_id), gọi model `gemini-3.5-flash-lite` qua SDK `google-genai==2.21.0` với
   schema JSON đã định nghĩa sẵn
   (field_code, value, source_ids), và validate kết quả trả về bằng Pydantic. Model
   chỉ được chọn source_id có sẵn trong input, không được tự sinh toạ độ hay

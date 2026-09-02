@@ -1047,7 +1047,7 @@ retry/backoff.
 
 **Requirements:**
 - Dùng đúng SDK `google-genai==2.21.0` (không dùng legacy
-  `google-generativeai`) và model `gemini-3.7-flash`.
+  `google-generativeai`) và model `gemini-3.5-flash-lite`.
 - Gọi Gemini API (free tier) với document-aware input và schema JSON định sẵn
   (`field_code`, `value`, `source_ids`), validate cấu trúc/catalog response bằng
   Pydantic. Validation nghiệp vụ từng field (value/source tồn tại) nằm ở
@@ -1077,7 +1077,7 @@ liệu khách hàng thật trong smoke/demo.
 Đọc docs/ARCHITECTURE.md mục 1 và mục 6 (LLM Extraction Module), PROJECT_BRIEF.md
 mục 5 bước 3 (LLM không được tự tạo bbox), và DEVELOPMENT_RULES.md mục 14
 trước khi làm. Trong app/infra/llm/gemini_extractor.py, implement interface
-LLMProvider: dùng google-genai==2.21.0 gọi model gemini-3.7-flash (Google AI
+LLMProvider: dùng google-genai==2.21.0 gọi model gemini-3.5-flash-lite (Google AI
 Studio free tier) với document-aware input và structured
 output schema JSON định sẵn (field_code, value, source_ids), validate response
 bằng Pydantic ở mức cấu trúc/catalog. Giữ nguyên value/source_ids để

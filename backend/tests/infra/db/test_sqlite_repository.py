@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -12,7 +12,9 @@ from app.domain.models import (
     Document,
     DocumentOcrStatus,
     DocumentType,
+    OCRBlock,
 )
+from app.domain.ports.repository import Repository
 from app.infra.db.database import create_session_factory, create_sqlite_engine
 from app.infra.db.orm_models import Base
 from app.infra.db.sqlite_repository import SQLiteRepository
@@ -58,6 +60,28 @@ def make_document(
         page_count=1,
         ocr_status=ocr_status,
         uploaded_at=datetime(2026, 9, 1, 8, 30),
+    )
+
+
+def make_ocr_block(
+    block_id: str,
+    document_id: str,
+    *,
+    page_number: int = 1,
+    text: str = "Đơn đề nghị vay vốn",
+    created_at: datetime | None = None,
+) -> OCRBlock:
+    return OCRBlock(
+        id=block_id,
+        document_id=document_id,
+        page_number=page_number,
+        text=text,
+        bbox_x=0.12,
+        bbox_y=0.34,
+        bbox_width=0.30,
+        bbox_height=0.04,
+        confidence=0.97,
+        created_at=created_at or datetime(2026, 9, 1, 9, 0, tzinfo=UTC),
     )
 
 
@@ -249,19 +273,121 @@ def test_duplicate_document_type_rolls_back_and_repository_remains_usable(
     }
 
 
+def test_create_and_list_ocr_blocks_round_trip_all_fields(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    case = make_case("case-001")
+    document = make_document(
+        "document-001",
+        case.id,
+        DocumentType.LOAN_APPLICATION,
+    )
+    block = make_ocr_block("ocr-block-001", document.id)
+    repository.create_case(case)
+    repository.create_document(document)
+
+    created = repository.create_ocr_blocks([block])
+    retrieved = repository.list_ocr_blocks_by_document_id(document.id)
+
+    assert created == [block]
+    assert retrieved == [block]
+    assert retrieved[0].created_at.tzinfo is UTC
+
+
+def test_list_ocr_blocks_filters_document_and_orders_deterministically(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    case = make_case("case-001")
+    first_document = make_document(
+        "document-001",
+        case.id,
+        DocumentType.CCCD_FRONT,
+    )
+    second_document = make_document(
+        "document-002",
+        case.id,
+        DocumentType.CCCD_BACK,
+    )
+    created_at = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
+    later_on_page_one = make_ocr_block(
+        "ocr-block-002",
+        first_document.id,
+        created_at=created_at + timedelta(seconds=1),
+    )
+    page_two = make_ocr_block(
+        "ocr-block-003",
+        first_document.id,
+        page_number=2,
+        created_at=created_at,
+    )
+    earlier_on_page_one = make_ocr_block(
+        "ocr-block-001",
+        first_document.id,
+        created_at=created_at,
+    )
+    other_document_block = make_ocr_block(
+        "ocr-block-004",
+        second_document.id,
+    )
+    repository.create_case(case)
+    repository.create_document(first_document)
+    repository.create_document(second_document)
+
+    repository.create_ocr_blocks(
+        [page_two, later_on_page_one, other_document_block, earlier_on_page_one]
+    )
+
+    assert repository.list_ocr_blocks_by_document_id(first_document.id) == [
+        earlier_on_page_one,
+        later_on_page_one,
+        page_two,
+    ]
+
+
+def test_list_ocr_blocks_returns_empty_for_document_without_blocks(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+
+    assert repository.list_ocr_blocks_by_document_id("missing-document") == []
+    assert repository.create_ocr_blocks([]) == []
+
+
+def test_repository_exposes_no_ocr_block_update_or_delete_api() -> None:
+    forbidden_methods = {
+        "update_ocr_block",
+        "update_ocr_blocks",
+        "delete_ocr_block",
+        "delete_ocr_blocks",
+    }
+
+    for method_name in forbidden_methods:
+        assert not hasattr(Repository, method_name)
+        assert not hasattr(SQLiteRepository, method_name)
+
+
 def test_schema_has_only_required_tables_and_constraints(
     database: DatabaseFixture,
 ) -> None:
     _, engine = database
     inspector = inspect(engine)
 
-    assert set(inspector.get_table_names()) == {"cases", "documents"}
+    assert set(inspector.get_table_names()) == {
+        "cases",
+        "documents",
+        "ocr_blocks",
+    }
 
     case_columns = {
         column["name"] for column in inspector.get_columns("cases")
     }
     document_columns = {
         column["name"] for column in inspector.get_columns("documents")
+    }
+    ocr_block_columns = {
+        column["name"] for column in inspector.get_columns("ocr_blocks")
     }
     assert case_columns == {"id", "status", "created_at", "updated_at"}
     assert document_columns == {
@@ -273,11 +399,26 @@ def test_schema_has_only_required_tables_and_constraints(
         "ocr_status",
         "uploaded_at",
     }
+    assert ocr_block_columns == {
+        "id",
+        "document_id",
+        "page_number",
+        "text",
+        "bbox_x",
+        "bbox_y",
+        "bbox_width",
+        "bbox_height",
+        "confidence",
+        "created_at",
+    }
 
     assert inspector.get_pk_constraint("cases")["constrained_columns"] == [
         "id"
     ]
     assert inspector.get_pk_constraint("documents")["constrained_columns"] == [
+        "id"
+    ]
+    assert inspector.get_pk_constraint("ocr_blocks")["constrained_columns"] == [
         "id"
     ]
 
@@ -287,8 +428,26 @@ def test_schema_has_only_required_tables_and_constraints(
     assert foreign_keys[0]["referred_table"] == "cases"
     assert foreign_keys[0]["referred_columns"] == ["id"]
 
+    ocr_block_foreign_keys = inspector.get_foreign_keys("ocr_blocks")
+    assert len(ocr_block_foreign_keys) == 1
+    assert ocr_block_foreign_keys[0]["constrained_columns"] == ["document_id"]
+    assert ocr_block_foreign_keys[0]["referred_table"] == "documents"
+    assert ocr_block_foreign_keys[0]["referred_columns"] == ["id"]
+
     unique_constraints = inspector.get_unique_constraints("documents")
     assert {
         tuple(constraint["column_names"])
         for constraint in unique_constraints
     } == {("case_id", "document_type")}
+
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints("ocr_blocks")
+    } == {
+        "ck_ocr_blocks_bbox_height",
+        "ck_ocr_blocks_bbox_width",
+        "ck_ocr_blocks_bbox_x",
+        "ck_ocr_blocks_bbox_y",
+        "ck_ocr_blocks_confidence",
+        "ck_ocr_blocks_page_number",
+    }

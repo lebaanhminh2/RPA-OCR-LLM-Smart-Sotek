@@ -1,6 +1,15 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.domain.models import CaseStatus, DocumentOcrStatus, DocumentType
@@ -42,3 +51,47 @@ class DocumentRecord(Base):
         nullable=False,
     )
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class OCRBlockRecord(Base):
+    __tablename__ = "ocr_blocks"
+    __table_args__ = (
+        CheckConstraint("page_number >= 1", name="ck_ocr_blocks_page_number"),
+        CheckConstraint(
+            "bbox_x >= 0.0 AND bbox_x <= 1.0",
+            name="ck_ocr_blocks_bbox_x",
+        ),
+        CheckConstraint(
+            "bbox_y >= 0.0 AND bbox_y <= 1.0",
+            name="ck_ocr_blocks_bbox_y",
+        ),
+        CheckConstraint(
+            "bbox_width >= 0.0 AND bbox_width <= 1.0",
+            name="ck_ocr_blocks_bbox_width",
+        ),
+        CheckConstraint(
+            "bbox_height >= 0.0 AND bbox_height <= 1.0",
+            name="ck_ocr_blocks_bbox_height",
+        ),
+        CheckConstraint(
+            "confidence >= 0.0 AND confidence <= 1.0",
+            name="ck_ocr_blocks_confidence",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id"),
+        nullable=False,
+    )
+    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(String, nullable=False)
+    bbox_x: Mapped[float] = mapped_column(Float, nullable=False)
+    bbox_y: Mapped[float] = mapped_column(Float, nullable=False)
+    bbox_width: Mapped[float] = mapped_column(Float, nullable=False)
+    bbox_height: Mapped[float] = mapped_column(Float, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )

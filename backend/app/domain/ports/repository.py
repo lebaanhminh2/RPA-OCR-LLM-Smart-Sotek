@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Protocol
 
-from app.domain.models import Case, CaseStatus, Document, DocumentType
+from app.domain.models import Case, CaseStatus, Document, DocumentType, OCRBlock
 
 
 class Repository(Protocol):
@@ -27,3 +27,10 @@ class Repository(Protocol):
         case_id: str,
         document_type: DocumentType,
     ) -> bool: ...
+
+    def create_ocr_blocks(self, blocks: list[OCRBlock]) -> list[OCRBlock]: ...
+
+    def list_ocr_blocks_by_document_id(
+        self,
+        document_id: str,
+    ) -> list[OCRBlock]: ...

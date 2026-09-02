@@ -9,6 +9,7 @@ from app.domain.models import (
     Document,
     DocumentOcrStatus,
     DocumentType,
+    OCRBlock,
 )
 from app.domain.services.case_service import (
     CaseNotFoundError,
@@ -88,6 +89,15 @@ class FakeRepository:
             and document.document_type is document_type
             for document in self.documents
         )
+
+    def create_ocr_blocks(self, blocks: list[OCRBlock]) -> list[OCRBlock]:
+        return blocks
+
+    def list_ocr_blocks_by_document_id(
+        self,
+        document_id: str,
+    ) -> list[OCRBlock]:
+        return []
 
 
 def test_create_case_sets_uuid_uploading_status_and_timestamps() -> None:

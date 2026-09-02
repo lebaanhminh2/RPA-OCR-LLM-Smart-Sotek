@@ -10,6 +10,7 @@ from app.domain.models import (
     CaseStatus,
     Document,
     DocumentType,
+    OCRBlock,
 )
 from app.domain.services.case_service import CaseService
 
@@ -76,6 +77,15 @@ class FakeRepository:
             and document.document_type is document_type
             for document in self.documents
         )
+
+    def create_ocr_blocks(self, blocks: list[OCRBlock]) -> list[OCRBlock]:
+        return blocks
+
+    def list_ocr_blocks_by_document_id(
+        self,
+        document_id: str,
+    ) -> list[OCRBlock]:
+        return []
 
 
 def test_create_case_returns_created_case_from_case_service() -> None:

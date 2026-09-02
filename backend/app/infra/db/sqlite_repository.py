@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,9 +9,10 @@ from app.domain.models import (
     CaseStatus,
     Document,
     DocumentType,
+    OCRBlock,
 )
 from app.domain.ports.repository import Repository
-from app.infra.db.orm_models import CaseRecord, DocumentRecord
+from app.infra.db.orm_models import CaseRecord, DocumentRecord, OCRBlockRecord
 
 
 def _case_to_domain(record: CaseRecord) -> Case:
@@ -32,6 +33,33 @@ def _document_to_domain(record: DocumentRecord) -> Document:
         page_count=record.page_count,
         ocr_status=record.ocr_status,
         uploaded_at=record.uploaded_at,
+    )
+
+
+def _to_utc_storage(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
+
+
+def _from_utc_storage(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _ocr_block_to_domain(record: OCRBlockRecord) -> OCRBlock:
+    return OCRBlock(
+        id=record.id,
+        document_id=record.document_id,
+        page_number=record.page_number,
+        text=record.text,
+        bbox_x=record.bbox_x,
+        bbox_y=record.bbox_y,
+        bbox_width=record.bbox_width,
+        bbox_height=record.bbox_height,
+        confidence=record.confidence,
+        created_at=_from_utc_storage(record.created_at),
     )
 
 
@@ -132,3 +160,50 @@ class SQLiteRepository(Repository):
         )
         with self._session_factory() as session:
             return session.scalar(statement) is not None
+
+    def create_ocr_blocks(self, blocks: list[OCRBlock]) -> list[OCRBlock]:
+        if not blocks:
+            return []
+
+        records = [
+            OCRBlockRecord(
+                id=block.id,
+                document_id=block.document_id,
+                page_number=block.page_number,
+                text=block.text,
+                bbox_x=block.bbox_x,
+                bbox_y=block.bbox_y,
+                bbox_width=block.bbox_width,
+                bbox_height=block.bbox_height,
+                confidence=block.confidence,
+                created_at=_to_utc_storage(block.created_at),
+            )
+            for block in blocks
+        ]
+        with self._session_factory() as session:
+            session.add_all(records)
+            try:
+                session.commit()
+            except SQLAlchemyError:
+                session.rollback()
+                raise
+            for record in records:
+                session.refresh(record)
+            return [_ocr_block_to_domain(record) for record in records]
+
+    def list_ocr_blocks_by_document_id(
+        self,
+        document_id: str,
+    ) -> list[OCRBlock]:
+        statement = (
+            select(OCRBlockRecord)
+            .where(OCRBlockRecord.document_id == document_id)
+            .order_by(
+                OCRBlockRecord.page_number,
+                OCRBlockRecord.created_at,
+                OCRBlockRecord.id,
+            )
+        )
+        with self._session_factory() as session:
+            records = session.scalars(statement).all()
+            return [_ocr_block_to_domain(record) for record in records]

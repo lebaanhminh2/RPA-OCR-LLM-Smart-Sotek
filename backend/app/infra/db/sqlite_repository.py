@@ -8,6 +8,7 @@ from app.domain.models import (
     Case,
     CaseStatus,
     Document,
+    DocumentOcrStatus,
     DocumentType,
     OCRBlock,
 )
@@ -136,6 +137,25 @@ class SQLiteRepository(Repository):
         with self._session_factory() as session:
             record = session.get(DocumentRecord, document_id)
             return _document_to_domain(record) if record is not None else None
+
+    def update_document_ocr_status(
+        self,
+        document_id: str,
+        status: DocumentOcrStatus,
+    ) -> Document | None:
+        with self._session_factory() as session:
+            record = session.get(DocumentRecord, document_id)
+            if record is None:
+                return None
+
+            record.ocr_status = status
+            try:
+                session.commit()
+            except SQLAlchemyError:
+                session.rollback()
+                raise
+            session.refresh(record)
+            return _document_to_domain(record)
 
     def list_documents_by_case_id(self, case_id: str) -> list[Document]:
         statement = select(DocumentRecord).where(

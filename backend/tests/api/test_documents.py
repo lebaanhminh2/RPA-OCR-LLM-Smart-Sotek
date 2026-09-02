@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
+from fastapi.background import BackgroundTasks
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 
@@ -19,8 +20,14 @@ from app.domain.models import (
 )
 from app.domain.services.case_service import CaseService
 from app.domain.services.document_service import DocumentService
+from app.domain.services.extraction_service import ExtractionService
 
 ApiFixture = tuple[TestClient, "FakeRepository", Case, Path]
+
+
+class FakeOCRProvider:
+    def extract(self, document_id: str, file_path: str) -> list[OCRBlock]:
+        return []
 
 
 class FakeRepository:
@@ -68,6 +75,17 @@ class FakeRepository:
             None,
         )
 
+    def update_document_ocr_status(
+        self,
+        document_id: str,
+        status: DocumentOcrStatus,
+    ) -> Document | None:
+        for document in self.documents:
+            if document.id == document_id:
+                document.ocr_status = status
+                return document
+        return None
+
     def list_documents_by_case_id(self, case_id: str) -> list[Document]:
         return [
             document
@@ -101,6 +119,7 @@ def api(tmp_path: Path) -> Iterator[ApiFixture]:
     repository = FakeRepository()
     case_service = CaseService(repository)
     document_service = DocumentService(repository)
+    extraction_service = ExtractionService(repository, FakeOCRProvider())
     case = case_service.create_case()
     upload_root = tmp_path / "uploads"
     test_app = FastAPI()
@@ -108,6 +127,7 @@ def api(tmp_path: Path) -> Iterator[ApiFixture]:
         create_documents_router(
             case_service,
             document_service,
+            lambda: extraction_service,
             upload_root,
         )
     )
@@ -258,6 +278,49 @@ def test_four_required_uploads_transition_case_to_processing(
 
     assert len(repository.documents) == 4
     assert repository.cases[case.id].status is CaseStatus.PROCESSING
+
+
+def test_fourth_upload_schedules_ocr_without_calling_it_inline(
+    api: ApiFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _, case, _ = api
+    scheduled: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
+
+    def capture_task(
+        _: BackgroundTasks,
+        function: object,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        scheduled.append((function, args, kwargs))
+
+    monkeypatch.setattr(BackgroundTasks, "add_task", capture_task)
+
+    for document_type in (
+        DocumentType.CCCD_FRONT,
+        DocumentType.CCCD_BACK,
+        DocumentType.LOAN_APPLICATION,
+        DocumentType.LABOR_CONTRACT,
+    ):
+        response = client.post(
+            f"/cases/{case.id}/documents",
+            data={"document_type": document_type.value},
+            files={
+                "file": (
+                    f"{document_type.value.lower()}.png",
+                    b"synthetic-image",
+                    "image/png",
+                )
+            },
+        )
+        assert response.status_code == 201
+
+    assert len(scheduled) == 1
+    scheduled_function, scheduled_args, scheduled_kwargs = scheduled[0]
+    assert getattr(scheduled_function, "__name__", None) == "process_case_ocr"
+    assert scheduled_args == (case.id,)
+    assert scheduled_kwargs == {}
 
 
 def test_unsupported_file_returns_415_without_persisting_or_storing(

@@ -9,6 +9,7 @@ from app.domain.models import (
     Case,
     CaseStatus,
     Document,
+    DocumentOcrStatus,
     DocumentType,
     OCRBlock,
 )
@@ -59,6 +60,17 @@ class FakeRepository:
             ),
             None,
         )
+
+    def update_document_ocr_status(
+        self,
+        document_id: str,
+        status: DocumentOcrStatus,
+    ) -> Document | None:
+        for document in self.documents:
+            if document.id == document_id:
+                document.ocr_status = status
+                return document
+        return None
 
     def list_documents_by_case_id(self, case_id: str) -> list[Document]:
         return [

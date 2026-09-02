@@ -1,11 +1,20 @@
 import re
+from collections.abc import Callable
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pypdf import PdfReader
@@ -21,6 +30,7 @@ from app.domain.services.document_service import (
     DocumentNotFoundError,
     DocumentService,
 )
+from app.domain.services.extraction_service import ExtractionService
 
 
 class DocumentResponse(BaseModel):
@@ -83,6 +93,7 @@ def _store_file(
 def create_documents_router(
     case_service: CaseService,
     document_service: DocumentService,
+    extraction_service_provider: Callable[[], ExtractionService],
     upload_root: Path,
 ) -> APIRouter:
     router = APIRouter()
@@ -94,6 +105,7 @@ def create_documents_router(
     )
     def upload_document(
         case_id: str,
+        background_tasks: BackgroundTasks,
         document_type: Annotated[DocumentType, Form()],
         file: Annotated[UploadFile, File()],
     ) -> DocumentResponse:
@@ -128,6 +140,13 @@ def create_documents_router(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=str(error),
             ) from error
+
+        extraction_service = extraction_service_provider()
+        if extraction_service.is_case_ready_for_ocr(case_id):
+            background_tasks.add_task(
+                extraction_service.process_case_ocr,
+                case_id,
+            )
 
         return DocumentResponse(
             id=document.id,

@@ -11,6 +11,7 @@ from app.api.cases import create_cases_router
 from app.api.documents import create_documents_router
 from app.domain.services.case_service import CaseService
 from app.domain.services.document_service import DocumentService
+from app.domain.services.extraction_service import ExtractionService
 from app.infra.db.database import (
     SessionFactory,
     engine,
@@ -18,6 +19,9 @@ from app.infra.db.database import (
 )
 from app.infra.db.orm_models import Base
 from app.infra.db.sqlite_repository import SQLiteRepository
+from app.infra.ocr.local_ocr_adapter import LocalOCRAdapter
+
+_extraction_service: ExtractionService | None = None
 
 
 class HealthResponse(BaseModel):
@@ -26,11 +30,18 @@ class HealthResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    global _extraction_service
+
     verify_database_connection(engine)
     Base.metadata.create_all(engine)
     try:
+        _extraction_service = ExtractionService(
+            repository,
+            LocalOCRAdapter(),
+        )
         yield
     finally:
+        _extraction_service = None
         engine.dispose()
 
 
@@ -38,6 +49,12 @@ repository = SQLiteRepository(SessionFactory)
 case_service = CaseService(repository)
 document_service = DocumentService(repository)
 upload_root = Path(__file__).resolve().parents[1] / "uploads"
+
+
+def get_extraction_service() -> ExtractionService:
+    if _extraction_service is None:
+        raise RuntimeError("Extraction service is unavailable before startup.")
+    return _extraction_service
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
@@ -52,7 +69,12 @@ app.add_middleware(
 )
 app.include_router(create_cases_router(case_service))
 app.include_router(
-    create_documents_router(case_service, document_service, upload_root)
+    create_documents_router(
+        case_service,
+        document_service,
+        get_extraction_service,
+        upload_root,
+    )
 )
 
 

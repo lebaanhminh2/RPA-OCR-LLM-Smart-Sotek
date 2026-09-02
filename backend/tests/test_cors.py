@@ -1,7 +1,21 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.domain.models import OCRBlock
 from app.main import app
+
+
+class FakeOCRProvider:
+    def extract(self, document_id: str, file_path: str) -> list[OCRBlock]:
+        return []
+
+
+@pytest.fixture(autouse=True)
+def use_fake_ocr_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "app.main.LocalOCRAdapter",
+        lambda: FakeOCRProvider(),
+    )
 
 
 @pytest.mark.parametrize(

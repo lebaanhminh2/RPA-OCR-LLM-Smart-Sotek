@@ -41,6 +41,16 @@ class FakeRepository:
     def get_document(self, document_id: str) -> Document | None:
         return self.documents.get(document_id)
 
+    def update_document_ocr_status(
+        self,
+        document_id: str,
+        status: DocumentOcrStatus,
+    ) -> Document | None:
+        document = self.documents.get(document_id)
+        if document is not None:
+            document.ocr_status = status
+        return document
+
     def list_documents_by_case_id(self, case_id: str) -> list[Document]:
         return [
             document

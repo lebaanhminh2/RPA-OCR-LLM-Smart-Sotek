@@ -181,6 +181,36 @@ def test_get_document_returns_none_when_document_does_not_exist(
     assert repository.get_document("missing-document") is None
 
 
+def test_update_document_ocr_status_persists_transition(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    case = make_case("case-001")
+    document = make_document(
+        "document-001",
+        case.id,
+        DocumentType.CCCD_FRONT,
+    )
+    repository.create_case(case)
+    repository.create_document(document)
+
+    updated = repository.update_document_ocr_status(
+        document.id,
+        DocumentOcrStatus.DONE,
+    )
+
+    assert updated is not None
+    assert updated.ocr_status is DocumentOcrStatus.DONE
+    assert repository.get_document(document.id) == updated
+    assert (
+        repository.update_document_ocr_status(
+            "missing-document",
+            DocumentOcrStatus.FAILED,
+        )
+        is None
+    )
+
+
 def test_list_documents_only_returns_documents_for_requested_case(
     database: DatabaseFixture,
 ) -> None:

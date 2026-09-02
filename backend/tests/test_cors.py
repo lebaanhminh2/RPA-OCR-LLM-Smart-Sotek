@@ -68,3 +68,18 @@ def test_origin_outside_allow_list_is_not_reflected() -> None:
 
     assert response.status_code == 200
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_patch_is_allowed_for_frontend_preflight() -> None:
+    with TestClient(app) as client:
+        response = client.options(
+            "/cases/case-001/fields/field-001",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "PATCH",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+    assert response.status_code == 200
+    assert "PATCH" in response.headers["access-control-allow-methods"]

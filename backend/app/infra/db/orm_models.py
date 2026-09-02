@@ -106,3 +106,42 @@ class OCRBlockRecord(Base):
         DateTime(timezone=True),
         nullable=False,
     )
+
+
+class ExtractedFieldRecord(Base):
+    __tablename__ = "extracted_fields"
+    __table_args__ = (UniqueConstraint("case_id", "field_code"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(
+        ForeignKey("cases.id"),
+        nullable=False,
+    )
+    field_code: Mapped[str] = mapped_column(String, nullable=False)
+    original_value: Mapped[str | None] = mapped_column(String, nullable=True)
+    current_value: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+
+class FieldSourceRecord(Base):
+    __tablename__ = "field_sources"
+    __table_args__ = (
+        UniqueConstraint("extracted_field_id", "ocr_block_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    extracted_field_id: Mapped[str] = mapped_column(
+        ForeignKey("extracted_fields.id"),
+        nullable=False,
+    )
+    ocr_block_id: Mapped[str] = mapped_column(
+        ForeignKey("ocr_blocks.id"),
+        nullable=False,
+    )

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
@@ -7,8 +8,22 @@ from app.domain.models import (
     Document,
     DocumentOcrStatus,
     DocumentType,
+    ExtractedField,
+    FieldSource,
     OCRBlock,
 )
+
+
+@dataclass(frozen=True)
+class FieldSourceEvidence:
+    field_source: FieldSource
+    ocr_block: OCRBlock
+
+
+@dataclass(frozen=True)
+class ExtractedFieldWithSources:
+    field: ExtractedField
+    sources: tuple[FieldSourceEvidence, ...]
 
 
 class Repository(Protocol):
@@ -47,3 +62,16 @@ class Repository(Protocol):
         self,
         document_id: str,
     ) -> list[OCRBlock]: ...
+
+
+class ExtractionRepository(Repository, Protocol):
+    def create_extracted_fields(
+        self,
+        fields: list[ExtractedField],
+        sources: list[FieldSource],
+    ) -> tuple[list[ExtractedField], list[FieldSource]]: ...
+
+    def list_extracted_fields_with_sources_by_case_id(
+        self,
+        case_id: str,
+    ) -> list[ExtractedFieldWithSources]: ...

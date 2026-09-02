@@ -12,10 +12,12 @@ from app.domain.models import (
     Document,
     DocumentOcrStatus,
     DocumentType,
+    ExtractedField,
+    FieldSource,
     OCRBlock,
     OCRBlockKind,
 )
-from app.domain.ports.repository import Repository
+from app.domain.ports.repository import ExtractionRepository, Repository
 from app.infra.db.database import create_session_factory, create_sqlite_engine
 from app.infra.db.orm_models import Base
 from app.infra.db.sqlite_repository import SQLiteRepository
@@ -85,6 +87,24 @@ def make_ocr_block(
         confidence=0.97,
         created_at=created_at or datetime(2026, 9, 1, 9, 0, tzinfo=UTC),
         block_kind=block_kind,
+    )
+
+
+def make_extracted_field(
+    field_id: str,
+    case_id: str,
+    field_code: str,
+    value: str | None,
+) -> ExtractedField:
+    timestamp = datetime(2026, 9, 1, 10, 0, tzinfo=UTC)
+    return ExtractedField(
+        id=field_id,
+        case_id=case_id,
+        field_code=field_code,
+        original_value=value,
+        current_value=value,
+        created_at=timestamp,
+        updated_at=timestamp,
     )
 
 
@@ -425,6 +445,138 @@ def test_repository_exposes_no_ocr_block_update_or_delete_api() -> None:
         assert not hasattr(SQLiteRepository, method_name)
 
 
+def test_create_and_list_extracted_fields_with_sources(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    case = make_case("case-001")
+    document = make_document(
+        "document-001",
+        case.id,
+        DocumentType.CCCD_FRONT,
+    )
+    block = make_ocr_block(
+        "ocr-block-001",
+        document.id,
+        text="Họ và tên: NGUYỄN VĂN AN",
+    )
+    populated_field = make_extracted_field(
+        "field-001",
+        case.id,
+        "ho_ten",
+        "NGUYỄN VĂN AN",
+    )
+    missing_field = make_extracted_field(
+        "field-002",
+        case.id,
+        "email",
+        None,
+    )
+    source = FieldSource(
+        id="field-source-001",
+        extracted_field_id=populated_field.id,
+        ocr_block_id=block.id,
+    )
+    repository.create_case(case)
+    repository.create_document(document)
+    repository.create_ocr_blocks([block])
+
+    created_fields, created_sources = repository.create_extracted_fields(
+        [populated_field, missing_field],
+        [source],
+    )
+    retrieved = repository.list_extracted_fields_with_sources_by_case_id(
+        case.id
+    )
+
+    assert created_fields == [populated_field, missing_field]
+    assert created_sources == [source]
+    by_code = {item.field.field_code: item for item in retrieved}
+    assert set(by_code) == {"ho_ten", "email"}
+    assert by_code["email"].field == missing_field
+    assert by_code["email"].sources == ()
+    assert by_code["ho_ten"].field == populated_field
+    assert len(by_code["ho_ten"].sources) == 1
+    evidence = by_code["ho_ten"].sources[0]
+    assert evidence.field_source == source
+    assert evidence.ocr_block == block
+
+
+def test_extracted_fields_are_filtered_by_case(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    first_case = make_case("case-001")
+    second_case = make_case("case-002")
+    first_field = make_extracted_field(
+        "field-001", first_case.id, "ho_ten", "NGUYỄN VĂN AN"
+    )
+    second_field = make_extracted_field(
+        "field-002", second_case.id, "ho_ten", "TRẦN THỊ BÌNH"
+    )
+    repository.create_case(first_case)
+    repository.create_case(second_case)
+    repository.create_extracted_fields([first_field], [])
+    repository.create_extracted_fields([second_field], [])
+
+    retrieved = repository.list_extracted_fields_with_sources_by_case_id(
+        first_case.id
+    )
+
+    assert [item.field for item in retrieved] == [first_field]
+
+
+def test_create_extracted_fields_rejects_source_outside_batch(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    field = make_extracted_field(
+        "field-001", "case-001", "ho_ten", "NGUYỄN VĂN AN"
+    )
+    source = FieldSource(
+        id="field-source-001",
+        extracted_field_id="field-outside-batch",
+        ocr_block_id="ocr-block-001",
+    )
+
+    with pytest.raises(ValueError, match="same batch"):
+        repository.create_extracted_fields([field], [source])
+
+
+def test_create_extracted_fields_rolls_back_whole_batch_on_conflict(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    case = make_case("case-001")
+    first = make_extracted_field(
+        "field-001", case.id, "ho_ten", "NGUYỄN VĂN AN"
+    )
+    conflicting = make_extracted_field(
+        "field-002", case.id, "ho_ten", "TRẦN THỊ BÌNH"
+    )
+    repository.create_case(case)
+
+    with pytest.raises(IntegrityError):
+        repository.create_extracted_fields([first, conflicting], [])
+
+    assert repository.list_extracted_fields_with_sources_by_case_id(
+        case.id
+    ) == []
+
+
+def test_repository_exposes_no_field_source_update_or_delete_api() -> None:
+    forbidden_methods = {
+        "update_field_source",
+        "update_field_sources",
+        "delete_field_source",
+        "delete_field_sources",
+    }
+
+    for method_name in forbidden_methods:
+        assert not hasattr(ExtractionRepository, method_name)
+        assert not hasattr(SQLiteRepository, method_name)
+
+
 def test_schema_has_only_required_tables_and_constraints(
     database: DatabaseFixture,
 ) -> None:
@@ -434,6 +586,8 @@ def test_schema_has_only_required_tables_and_constraints(
     assert set(inspector.get_table_names()) == {
         "cases",
         "documents",
+        "extracted_fields",
+        "field_sources",
         "ocr_blocks",
     }
 
@@ -445,6 +599,13 @@ def test_schema_has_only_required_tables_and_constraints(
     }
     ocr_block_columns = {
         column["name"] for column in inspector.get_columns("ocr_blocks")
+    }
+    extracted_field_columns = {
+        column["name"]
+        for column in inspector.get_columns("extracted_fields")
+    }
+    field_source_columns = {
+        column["name"] for column in inspector.get_columns("field_sources")
     }
     assert case_columns == {"id", "status", "created_at", "updated_at"}
     assert document_columns == {
@@ -469,6 +630,20 @@ def test_schema_has_only_required_tables_and_constraints(
         "confidence",
         "created_at",
     }
+    assert extracted_field_columns == {
+        "id",
+        "case_id",
+        "field_code",
+        "original_value",
+        "current_value",
+        "created_at",
+        "updated_at",
+    }
+    assert field_source_columns == {
+        "id",
+        "extracted_field_id",
+        "ocr_block_id",
+    }
 
     assert inspector.get_pk_constraint("cases")["constrained_columns"] == [
         "id"
@@ -479,6 +654,12 @@ def test_schema_has_only_required_tables_and_constraints(
     assert inspector.get_pk_constraint("ocr_blocks")["constrained_columns"] == [
         "id"
     ]
+    assert inspector.get_pk_constraint("extracted_fields")[
+        "constrained_columns"
+    ] == ["id"]
+    assert inspector.get_pk_constraint("field_sources")[
+        "constrained_columns"
+    ] == ["id"]
 
     foreign_keys = inspector.get_foreign_keys("documents")
     assert len(foreign_keys) == 1
@@ -492,11 +673,53 @@ def test_schema_has_only_required_tables_and_constraints(
     assert ocr_block_foreign_keys[0]["referred_table"] == "documents"
     assert ocr_block_foreign_keys[0]["referred_columns"] == ["id"]
 
+    extracted_field_foreign_keys = inspector.get_foreign_keys(
+        "extracted_fields"
+    )
+    assert len(extracted_field_foreign_keys) == 1
+    assert extracted_field_foreign_keys[0]["constrained_columns"] == [
+        "case_id"
+    ]
+    assert extracted_field_foreign_keys[0]["referred_table"] == "cases"
+
+    field_source_foreign_keys = {
+        foreign_key["constrained_columns"][0]: foreign_key
+        for foreign_key in inspector.get_foreign_keys("field_sources")
+    }
+    assert set(field_source_foreign_keys) == {
+        "extracted_field_id",
+        "ocr_block_id",
+    }
+    assert (
+        field_source_foreign_keys["extracted_field_id"]["referred_table"]
+        == "extracted_fields"
+    )
+    assert (
+        field_source_foreign_keys["ocr_block_id"]["referred_table"]
+        == "ocr_blocks"
+    )
+
     unique_constraints = inspector.get_unique_constraints("documents")
     assert {
         tuple(constraint["column_names"])
         for constraint in unique_constraints
     } == {("case_id", "document_type")}
+
+    extracted_field_unique_constraints = inspector.get_unique_constraints(
+        "extracted_fields"
+    )
+    assert {
+        tuple(constraint["column_names"])
+        for constraint in extracted_field_unique_constraints
+    } == {("case_id", "field_code")}
+
+    field_source_unique_constraints = inspector.get_unique_constraints(
+        "field_sources"
+    )
+    assert {
+        tuple(constraint["column_names"])
+        for constraint in field_source_unique_constraints
+    } == {("extracted_field_id", "ocr_block_id")}
 
     assert {
         constraint["name"]

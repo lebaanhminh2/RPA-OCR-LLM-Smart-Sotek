@@ -10,6 +10,7 @@ from app.domain.models import (
     DocumentOcrStatus,
     DocumentType,
     OCRBlock,
+    OCRBlockKind,
 )
 
 
@@ -93,6 +94,7 @@ def test_ocr_block_preserves_supplied_values_and_has_exact_fields() -> None:
     assert ocr_block.bbox_height == 0.04
     assert ocr_block.confidence == 0.97
     assert ocr_block.created_at is created_at
+    assert ocr_block.block_kind is OCRBlockKind.TEXT
     assert isinstance(ocr_block.page_number, int)
     assert isinstance(ocr_block.bbox_x, float)
     assert isinstance(ocr_block.bbox_y, float)
@@ -111,6 +113,7 @@ def test_ocr_block_preserves_supplied_values_and_has_exact_fields() -> None:
         "bbox_height",
         "confidence",
         "created_at",
+        "block_kind",
     ]
 
 
@@ -156,4 +159,11 @@ def test_document_ocr_status_has_exact_names_and_values() -> None:
         ("PENDING", "PENDING"),
         ("DONE", "DONE"),
         ("FAILED", "FAILED"),
+    ]
+
+
+def test_ocr_block_kind_has_exact_names_and_values() -> None:
+    assert [(member.name, member.value) for member in OCRBlockKind] == [
+        ("TEXT", "TEXT"),
+        ("CHECKBOX_SELECTION", "CHECKBOX_SELECTION"),
     ]

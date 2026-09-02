@@ -18,10 +18,21 @@ import numpy as np
 from numpy.typing import NDArray
 from PIL import Image, UnidentifiedImageError  # type: ignore[import-untyped]
 
-from app.domain.models import OCRBlock
+from app.domain.models import DocumentType, OCRBlock
 from app.domain.ports.ocr_provider import OCRProvider
+from app.infra.ocr.checkbox_detector import (
+    CheckboxDetectionError,
+    CheckboxPageDetector,
+    TemplateCheckboxDetector,
+)
 
 PDF_RENDER_SCALE = 2.0
+LOAN_TEMPLATE_PATH_ENV = "OCR_LOAN_APPLICATION_TEMPLATE_PATH"
+LOAN_TEMPLATE_CONFIG = (
+    Path(__file__).resolve().parent
+    / "templates"
+    / "loan_application_v1.json"
+)
 
 
 class LocalOCRError(RuntimeError):
@@ -38,6 +49,27 @@ class OCRInputError(LocalOCRError):
 
 class UnsupportedOCRInputError(OCRInputError):
     """Raised when an input is neither a supported image nor a PDF."""
+
+
+def _load_checkbox_detector() -> CheckboxPageDetector | None:
+    reference_path = os.getenv(LOAN_TEMPLATE_PATH_ENV)
+    if not reference_path:
+        return None
+    path = Path(reference_path).expanduser()
+    if not path.is_file():
+        raise OCRConfigurationError(
+            f"{LOAN_TEMPLATE_PATH_ENV} does not point to a reference PDF: "
+            f"{path}."
+        )
+    try:
+        return TemplateCheckboxDetector.from_paths(
+            LOAN_TEMPLATE_CONFIG,
+            path,
+        )
+    except CheckboxDetectionError as error:
+        raise OCRConfigurationError(
+            "Unable to initialize loan-application checkbox template."
+        ) from error
 
 
 class OCRProcessingError(LocalOCRError):
@@ -343,22 +375,36 @@ def _polygon_bounds(
 
 
 class LocalOCRAdapter(OCRProvider):
-    def __init__(self, model_root: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        model_root: str | Path | None = None,
+        checkbox_detector: CheckboxPageDetector | None = None,
+    ) -> None:
         resolved_root = _require_model_root(model_root)
         paddle_dir, config_path, weights_path = _resolve_model_assets(
             resolved_root
         )
         self._detector = _load_detector(paddle_dir)
         self._recognizer = _load_recognizer(config_path, weights_path)
+        self._checkbox_detector = checkbox_detector or _load_checkbox_detector()
 
     def extract(
         self,
         document_id: str,
+        document_type: DocumentType,
         file_path: str,
     ) -> list[OCRBlock]:
         path = Path(file_path).expanduser()
         if not path.is_file():
             raise OCRInputError(f"OCR input file does not exist: {path}.")
+        if (
+            document_type is DocumentType.LOAN_APPLICATION
+            and self._checkbox_detector is None
+        ):
+            raise OCRConfigurationError(
+                f"{LOAN_TEMPLATE_PATH_ENV} is required for "
+                "LOAN_APPLICATION checkbox extraction."
+            )
 
         blocks: list[OCRBlock] = []
         pages = _iter_page_images(path)
@@ -368,6 +414,15 @@ class LocalOCRAdapter(OCRProvider):
                     blocks.extend(
                         self._process_page(document_id, page_number, image)
                     )
+                    if document_type is DocumentType.LOAN_APPLICATION:
+                        assert self._checkbox_detector is not None
+                        blocks.extend(
+                            self._checkbox_detector.detect_page(
+                                document_id,
+                                page_number,
+                                image,
+                            )
+                        )
                 finally:
                     image.close()
         return blocks

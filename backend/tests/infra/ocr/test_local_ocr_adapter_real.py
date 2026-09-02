@@ -7,6 +7,7 @@ from uuid import UUID
 
 import pytest
 
+from app.domain.models import DocumentType
 from app.infra.ocr.local_ocr_adapter import LocalOCRAdapter
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "synthetic_vietnamese_print.png"
@@ -53,7 +54,11 @@ def test_real_local_ocr_adapter_processes_static_fixture_offline(
     monkeypatch.setattr("requests.sessions.Session.request", deny_network)
 
     adapter = LocalOCRAdapter(model_root)
-    blocks = adapter.extract("synthetic-document", str(FIXTURE_PATH))
+    blocks = adapter.extract(
+        "synthetic-document",
+        DocumentType.CCCD_FRONT,
+        str(FIXTURE_PATH),
+    )
 
     assert type(adapter._detector).__module__.startswith("paddleocr.")
     assert type(adapter._recognizer).__module__.startswith("vietocr.")

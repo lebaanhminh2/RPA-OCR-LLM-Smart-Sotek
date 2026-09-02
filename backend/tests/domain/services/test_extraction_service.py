@@ -90,10 +90,15 @@ class FakeRepository:
 class FakeOCRProvider:
     def __init__(self, failing_document_ids: set[str] | None = None) -> None:
         self.failing_document_ids = failing_document_ids or set()
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[str, DocumentType, str]] = []
 
-    def extract(self, document_id: str, file_path: str) -> list[OCRBlock]:
-        self.calls.append((document_id, file_path))
+    def extract(
+        self,
+        document_id: str,
+        document_type: DocumentType,
+        file_path: str,
+    ) -> list[OCRBlock]:
+        self.calls.append((document_id, document_type, file_path))
         if document_id in self.failing_document_ids:
             raise RuntimeError("synthetic OCR failure")
         return [
@@ -144,7 +149,8 @@ def test_process_case_ocr_persists_blocks_and_marks_documents_done() -> None:
     service.process_case_ocr(case.id)
 
     assert ocr_provider.calls == [
-        (document.id, document.file_path) for document in documents
+        (document.id, document.document_type, document.file_path)
+        for document in documents
     ]
     assert {block.document_id for block in repository.ocr_blocks} == {
         document.id for document in documents

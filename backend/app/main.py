@@ -15,6 +15,7 @@ from app.domain.services.extraction_service import ExtractionService
 from app.infra.db.database import (
     SessionFactory,
     engine,
+    ensure_ocr_block_kind_column,
     verify_database_connection,
 )
 from app.infra.db.orm_models import Base
@@ -34,6 +35,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
     verify_database_connection(engine)
     Base.metadata.create_all(engine)
+    ensure_ocr_block_kind_column(engine)
     try:
         _extraction_service = ExtractionService(
             repository,

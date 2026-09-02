@@ -41,6 +41,7 @@ class ExtractionService:
         try:
             blocks = self._ocr_provider.extract(
                 document.id,
+                document.document_type,
                 document.file_path,
             )
             self._repository.create_ocr_blocks(blocks)

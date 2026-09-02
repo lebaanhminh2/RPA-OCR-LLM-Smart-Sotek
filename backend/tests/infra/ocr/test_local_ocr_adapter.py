@@ -1,4 +1,5 @@
 from collections.abc import Iterator, Mapping, MutableMapping
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 from uuid import UUID
@@ -9,6 +10,7 @@ from numpy.typing import NDArray
 from PIL import Image  # type: ignore[import-untyped]
 
 import app.infra.ocr.local_ocr_adapter as ocr
+from app.domain.models import DocumentType, OCRBlock, OCRBlockKind
 from app.infra.ocr.local_ocr_adapter import (
     LocalOCRAdapter,
     OCRConfigurationError,
@@ -55,6 +57,21 @@ class FakeRecognizer:
         return cast(str, self.text)
 
 
+class FakeCheckboxDetector:
+    def __init__(self, blocks: list[OCRBlock] | None = None) -> None:
+        self.blocks = blocks or []
+        self.calls: list[tuple[str, int, tuple[int, int]]] = []
+
+    def detect_page(
+        self,
+        document_id: str,
+        page_number: int,
+        image: Image.Image,
+    ) -> list[OCRBlock]:
+        self.calls.append((document_id, page_number, image.size))
+        return self.blocks
+
+
 def _write_model_assets(root: Path, omitted: set[str] | None = None) -> None:
     omitted = omitted or set()
     paddle_dir = root / "paddle_detection"
@@ -95,10 +112,11 @@ def _build_adapter(
     model_root: Path,
     detector: FakeDetector,
     recognizer: FakeRecognizer,
+    checkbox_detector: FakeCheckboxDetector | None = None,
 ) -> LocalOCRAdapter:
     monkeypatch.setattr(ocr, "_load_detector", lambda _: detector)
     monkeypatch.setattr(ocr, "_load_recognizer", lambda _config, _weights: recognizer)
-    return LocalOCRAdapter(model_root)
+    return LocalOCRAdapter(model_root, checkbox_detector)
 
 
 def _single_result(
@@ -276,8 +294,12 @@ def test_repeated_image_extract_reuses_models_and_maps_evidence(
     recognizer = FakeRecognizer("Đơn đề nghị vay vốn")
     adapter = _build_adapter(monkeypatch, model_root, detector, recognizer)
 
-    first = adapter.extract("document-1", str(image_path))
-    second = adapter.extract("document-1", str(image_path))
+    first = adapter.extract(
+        "document-1", DocumentType.CCCD_FRONT, str(image_path)
+    )
+    second = adapter.extract(
+        "document-1", DocumentType.CCCD_FRONT, str(image_path)
+    )
 
     assert len(detector.calls) == 2
     assert detector.calls[0][0, 0].tolist() == [30, 20, 10]
@@ -317,7 +339,12 @@ def test_zero_area_and_fully_outside_regions_are_skipped(
     recognizer = FakeRecognizer()
     adapter = _build_adapter(monkeypatch, model_root, detector, recognizer)
 
-    assert adapter.extract("document-1", str(image_path)) == []
+    assert (
+        adapter.extract(
+            "document-1", DocumentType.CCCD_FRONT, str(image_path)
+        )
+        == []
+    )
     assert recognizer.crop_sizes == []
 
 
@@ -344,7 +371,9 @@ def test_invalid_confidence_fails_explicitly(
     )
 
     with pytest.raises(OCRProcessingError, match="confidence"):
-        adapter.extract("document-1", str(image_path))
+        adapter.extract(
+            "document-1", DocumentType.CCCD_FRONT, str(image_path)
+        )
 
 
 @pytest.mark.parametrize(
@@ -372,7 +401,9 @@ def test_malformed_or_non_finite_polygon_fails_explicitly(
     )
 
     with pytest.raises(OCRProcessingError, match="Malformed detector response"):
-        adapter.extract("document-1", str(image_path))
+        adapter.extract(
+            "document-1", DocumentType.CCCD_FRONT, str(image_path)
+        )
 
 
 def test_empty_detection_returns_empty_without_recognition(
@@ -386,7 +417,12 @@ def test_empty_detection_returns_empty_without_recognition(
     recognizer = FakeRecognizer()
     adapter = _build_adapter(monkeypatch, model_root, detector, recognizer)
 
-    assert adapter.extract("document-1", str(image_path)) == []
+    assert (
+        adapter.extract(
+            "document-1", DocumentType.CCCD_FRONT, str(image_path)
+        )
+        == []
+    )
     assert recognizer.crop_sizes == []
 
 
@@ -411,7 +447,9 @@ def test_mismatched_polygon_and_score_counts_fail(
     )
 
     with pytest.raises(OCRProcessingError, match="different lengths"):
-        adapter.extract("document-1", str(image_path))
+        adapter.extract(
+            "document-1", DocumentType.CCCD_FRONT, str(image_path)
+        )
 
 
 def test_detector_failure_includes_page_context(
@@ -429,7 +467,9 @@ def test_detector_failure_includes_page_context(
     )
 
     with pytest.raises(OCRProcessingError, match="detection failed on page 1"):
-        adapter.extract("document-1", str(image_path))
+        adapter.extract(
+            "document-1", DocumentType.CCCD_FRONT, str(image_path)
+        )
 
 
 def test_recognizer_failure_includes_page_and_region_context(
@@ -456,7 +496,9 @@ def test_recognizer_failure_includes_page_and_region_context(
         OCRProcessingError,
         match="recognition failed on page 1, region 1",
     ):
-        adapter.extract("document-1", str(image_path))
+        adapter.extract(
+            "document-1", DocumentType.CCCD_FRONT, str(image_path)
+        )
 
 
 def test_pdf_pages_are_processed_in_one_based_order(
@@ -485,7 +527,9 @@ def test_pdf_pages_are_processed_in_one_based_order(
 
     monkeypatch.setattr(ocr, "_iter_pdf_pages", fake_pdf_pages)
 
-    blocks = adapter.extract("document-1", str(pdf_path))
+    blocks = adapter.extract(
+        "document-1", DocumentType.CCCD_FRONT, str(pdf_path)
+    )
 
     assert [block.page_number for block in blocks] == [1, 2]
     assert [block.bbox_width for block in blocks] == pytest.approx([0.8, 0.4])
@@ -504,7 +548,11 @@ def test_missing_input_file_fails(
     )
 
     with pytest.raises(OCRInputError, match="does not exist"):
-        adapter.extract("document-1", str(tmp_path / "missing.png"))
+        adapter.extract(
+            "document-1",
+            DocumentType.CCCD_FRONT,
+            str(tmp_path / "missing.png"),
+        )
 
 
 def test_corrupt_image_fails(
@@ -522,7 +570,9 @@ def test_corrupt_image_fails(
     )
 
     with pytest.raises(OCRInputError, match="corrupt image"):
-        adapter.extract("document-1", str(image_path))
+        adapter.extract(
+            "document-1", DocumentType.CCCD_FRONT, str(image_path)
+        )
 
 
 def test_unsupported_input_fails(
@@ -540,7 +590,9 @@ def test_unsupported_input_fails(
     )
 
     with pytest.raises(UnsupportedOCRInputError, match="Unsupported"):
-        adapter.extract("document-1", str(text_path))
+        adapter.extract(
+            "document-1", DocumentType.CCCD_FRONT, str(text_path)
+        )
 
 
 def test_corrupt_pdf_fails(
@@ -558,4 +610,96 @@ def test_corrupt_pdf_fails(
     )
 
     with pytest.raises(OCRInputError, match="corrupt PDF"):
-        adapter.extract("document-1", str(pdf_path))
+        adapter.extract(
+            "document-1", DocumentType.CCCD_FRONT, str(pdf_path)
+        )
+
+
+def test_loan_application_requires_checkbox_reference(
+    model_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    image_path = tmp_path / "loan.png"
+    _write_image(image_path)
+    monkeypatch.delenv("OCR_LOAN_APPLICATION_TEMPLATE_PATH", raising=False)
+    adapter = _build_adapter(
+        monkeypatch,
+        model_root,
+        FakeDetector(),
+        FakeRecognizer(),
+    )
+
+    with pytest.raises(
+        OCRConfigurationError,
+        match="OCR_LOAN_APPLICATION_TEMPLATE_PATH",
+    ):
+        adapter.extract(
+            "document-1",
+            DocumentType.LOAN_APPLICATION,
+            str(image_path),
+        )
+
+
+def test_loan_application_merges_checkbox_selection_blocks(
+    model_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    image_path = tmp_path / "loan.png"
+    _write_image(image_path)
+    selection = OCRBlock(
+        id="checkbox-1",
+        document_id="document-1",
+        page_number=1,
+        text="field_code=ky_han_vay;option=24 tháng",
+        bbox_x=0.3,
+        bbox_y=0.2,
+        bbox_width=0.1,
+        bbox_height=0.02,
+        confidence=0.98,
+        created_at=datetime(2026, 9, 2, 8, 0, tzinfo=UTC),
+        block_kind=OCRBlockKind.CHECKBOX_SELECTION,
+    )
+    checkbox_detector = FakeCheckboxDetector([selection])
+    adapter = _build_adapter(
+        monkeypatch,
+        model_root,
+        FakeDetector(),
+        FakeRecognizer(),
+        checkbox_detector,
+    )
+
+    blocks = adapter.extract(
+        "document-1",
+        DocumentType.LOAN_APPLICATION,
+        str(image_path),
+    )
+
+    assert blocks == [selection]
+    assert checkbox_detector.calls == [("document-1", 1, (100, 80))]
+
+
+def test_non_loan_document_does_not_invoke_checkbox_detector(
+    model_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    image_path = tmp_path / "cccd.png"
+    _write_image(image_path)
+    checkbox_detector = FakeCheckboxDetector()
+    adapter = _build_adapter(
+        monkeypatch,
+        model_root,
+        FakeDetector(),
+        FakeRecognizer(),
+        checkbox_detector,
+    )
+
+    adapter.extract(
+        "document-1",
+        DocumentType.CCCD_FRONT,
+        str(image_path),
+    )
+
+    assert checkbox_detector.calls == []

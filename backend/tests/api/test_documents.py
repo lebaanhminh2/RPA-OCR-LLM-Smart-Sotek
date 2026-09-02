@@ -26,7 +26,12 @@ ApiFixture = tuple[TestClient, "FakeRepository", Case, Path]
 
 
 class FakeOCRProvider:
-    def extract(self, document_id: str, file_path: str) -> list[OCRBlock]:
+    def extract(
+        self,
+        document_id: str,
+        document_type: DocumentType,
+        file_path: str,
+    ) -> list[OCRBlock]:
         return []
 
 

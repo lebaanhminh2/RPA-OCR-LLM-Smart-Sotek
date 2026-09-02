@@ -53,6 +53,7 @@ def _ocr_block_to_domain(record: OCRBlockRecord) -> OCRBlock:
     return OCRBlock(
         id=record.id,
         document_id=record.document_id,
+        block_kind=record.block_kind,
         page_number=record.page_number,
         text=record.text,
         bbox_x=record.bbox_x,
@@ -189,6 +190,7 @@ class SQLiteRepository(Repository):
             OCRBlockRecord(
                 id=block.id,
                 document_id=block.document_id,
+                block_kind=block.block_kind,
                 page_number=block.page_number,
                 text=block.text,
                 bbox_x=block.bbox_x,

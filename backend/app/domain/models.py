@@ -24,6 +24,11 @@ class DocumentOcrStatus(str, Enum):
     FAILED = "FAILED"
 
 
+class OCRBlockKind(str, Enum):
+    TEXT = "TEXT"
+    CHECKBOX_SELECTION = "CHECKBOX_SELECTION"
+
+
 @dataclass
 class Case:
     id: str
@@ -55,3 +60,4 @@ class OCRBlock:
     bbox_height: float
     confidence: float
     created_at: datetime
+    block_kind: OCRBlockKind = OCRBlockKind.TEXT

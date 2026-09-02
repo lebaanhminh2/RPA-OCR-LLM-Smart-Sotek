@@ -13,6 +13,7 @@ from app.domain.models import (
     DocumentOcrStatus,
     DocumentType,
     OCRBlock,
+    OCRBlockKind,
 )
 from app.domain.ports.repository import Repository
 from app.infra.db.database import create_session_factory, create_sqlite_engine
@@ -69,6 +70,7 @@ def make_ocr_block(
     *,
     page_number: int = 1,
     text: str = "Đơn đề nghị vay vốn",
+    block_kind: OCRBlockKind = OCRBlockKind.TEXT,
     created_at: datetime | None = None,
 ) -> OCRBlock:
     return OCRBlock(
@@ -82,6 +84,7 @@ def make_ocr_block(
         bbox_height=0.04,
         confidence=0.97,
         created_at=created_at or datetime(2026, 9, 1, 9, 0, tzinfo=UTC),
+        block_kind=block_kind,
     )
 
 
@@ -325,6 +328,30 @@ def test_create_and_list_ocr_blocks_round_trip_all_fields(
     assert retrieved[0].created_at.tzinfo is UTC
 
 
+def test_checkbox_selection_block_round_trips_kind(
+    database: DatabaseFixture,
+) -> None:
+    repository, _ = database
+    case = make_case("case-001")
+    document = make_document(
+        "document-001",
+        case.id,
+        DocumentType.LOAN_APPLICATION,
+    )
+    block = make_ocr_block(
+        "ocr-checkbox-001",
+        document.id,
+        text="field_code=ky_han_vay;option=24 tháng",
+        block_kind=OCRBlockKind.CHECKBOX_SELECTION,
+    )
+    repository.create_case(case)
+    repository.create_document(document)
+
+    repository.create_ocr_blocks([block])
+
+    assert repository.list_ocr_blocks_by_document_id(document.id) == [block]
+
+
 def test_list_ocr_blocks_filters_document_and_orders_deterministically(
     database: DatabaseFixture,
 ) -> None:
@@ -432,6 +459,7 @@ def test_schema_has_only_required_tables_and_constraints(
     assert ocr_block_columns == {
         "id",
         "document_id",
+        "block_kind",
         "page_number",
         "text",
         "bbox_x",

@@ -1,12 +1,17 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.domain.models import OCRBlock
+from app.domain.models import DocumentType, OCRBlock
 from app.main import app
 
 
 class FakeOCRProvider:
-    def extract(self, document_id: str, file_path: str) -> list[OCRBlock]:
+    def extract(
+        self,
+        document_id: str,
+        document_type: DocumentType,
+        file_path: str,
+    ) -> list[OCRBlock]:
         return []
 
 

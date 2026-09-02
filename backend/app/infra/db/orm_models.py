@@ -12,7 +12,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from app.domain.models import CaseStatus, DocumentOcrStatus, DocumentType
+from app.domain.models import (
+    CaseStatus,
+    DocumentOcrStatus,
+    DocumentType,
+    OCRBlockKind,
+)
 
 
 class Base(DeclarativeBase):
@@ -83,6 +88,12 @@ class OCRBlockRecord(Base):
     document_id: Mapped[str] = mapped_column(
         ForeignKey("documents.id"),
         nullable=False,
+    )
+    block_kind: Mapped[OCRBlockKind] = mapped_column(
+        Enum(OCRBlockKind, native_enum=False),
+        nullable=False,
+        default=OCRBlockKind.TEXT,
+        server_default=OCRBlockKind.TEXT.value,
     )
     page_number: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(String, nullable=False)

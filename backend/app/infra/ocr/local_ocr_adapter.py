@@ -9,6 +9,7 @@ from collections.abc import (
     MutableMapping,
 )
 from contextlib import closing
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, cast
@@ -27,6 +28,8 @@ from app.infra.ocr.checkbox_detector import (
 )
 
 PDF_RENDER_SCALE = 2.0
+TEXT_DETECTION_BATCH_SIZE = 2
+TEXT_RECOGNITION_BATCH_SIZE = 16
 LOAN_TEMPLATE_PATH_ENV = "OCR_LOAN_APPLICATION_TEMPLATE_PATH"
 LOAN_TEMPLATE_CONFIG = (
     Path(__file__).resolve().parent
@@ -79,12 +82,14 @@ class OCRProcessingError(LocalOCRError):
 class _Detector(Protocol):
     def predict(
         self,
-        image: NDArray[np.uint8],
+        images: list[NDArray[np.uint8]],
+        *,
+        batch_size: int,
     ) -> Iterable[Mapping[str, object]]: ...
 
 
 class _Recognizer(Protocol):
-    def predict(self, image: Image.Image) -> str: ...
+    def predict_batch(self, images: list[Image.Image]) -> list[str]: ...
 
 
 class _DetectorFactory(Protocol):
@@ -102,6 +107,18 @@ class _PredictorFactory(Protocol):
 
 
 ConfigLoader = Callable[[str], MutableMapping[str, object]]
+
+
+@dataclass
+class _PendingRecognition:
+    page_number: int
+    region_number: int
+    crop: Image.Image
+    bbox_x: float
+    bbox_y: float
+    bbox_width: float
+    bbox_height: float
+    confidence: float
 
 
 def _ensure_vietocr_pillow_compatibility() -> None:
@@ -406,65 +423,114 @@ class LocalOCRAdapter(OCRProvider):
                 "LOAN_APPLICATION checkbox extraction."
             )
 
-        blocks: list[OCRBlock] = []
-        pages = _iter_page_images(path)
-        with closing(pages):
-            for page_number, image in pages:
-                try:
-                    blocks.extend(
-                        self._process_page(document_id, page_number, image)
-                    )
-                    if document_type is DocumentType.LOAN_APPLICATION:
-                        assert self._checkbox_detector is not None
-                        blocks.extend(
-                            self._checkbox_detector.detect_page(
-                                document_id,
-                                page_number,
-                                image,
-                            )
-                        )
-                finally:
-                    image.close()
-        return blocks
+        page_inputs: list[tuple[int, Image.Image]] = []
+        try:
+            pages = _iter_page_images(path)
+            with closing(pages):
+                for page_number, image in pages:
+                    page_inputs.append((page_number, image))
 
-    def _process_page(
+            text_blocks = self._process_pages(document_id, page_inputs)
+            blocks_by_page: dict[int, list[OCRBlock]] = {
+                page_number: [] for page_number, _ in page_inputs
+            }
+            for block in text_blocks:
+                blocks_by_page[block.page_number].append(block)
+
+            blocks: list[OCRBlock] = []
+            for page_number, image in page_inputs:
+                blocks.extend(blocks_by_page[page_number])
+                if document_type is DocumentType.LOAN_APPLICATION:
+                    assert self._checkbox_detector is not None
+                    blocks.extend(
+                        self._checkbox_detector.detect_page(
+                            document_id,
+                            page_number,
+                            image,
+                        )
+                    )
+            return blocks
+        finally:
+            for _, image in page_inputs:
+                image.close()
+
+    def _process_pages(
         self,
         document_id: str,
-        page_number: int,
-        image: Image.Image,
+        pages: list[tuple[int, Image.Image]],
     ) -> list[OCRBlock]:
-        page_width, page_height = image.size
-        if page_width <= 0 or page_height <= 0:
-            raise OCRInputError(
-                f"Page {page_number} has invalid dimensions: "
-                f"{page_width}x{page_height}."
-            )
+        if not pages:
+            return []
 
-        rgb_pixels = np.asarray(image, dtype=np.uint8)
-        bgr_pixels = np.ascontiguousarray(rgb_pixels[:, :, ::-1])
+        bgr_pages: list[NDArray[np.uint8]] = []
+        for page_number, image in pages:
+            page_width, page_height = image.size
+            if page_width <= 0 or page_height <= 0:
+                raise OCRInputError(
+                    f"Page {page_number} has invalid dimensions: "
+                    f"{page_width}x{page_height}."
+                )
+            rgb_pixels = np.asarray(image, dtype=np.uint8)
+            bgr_pages.append(np.ascontiguousarray(rgb_pixels[:, :, ::-1]))
+
+        first_page_number = pages[0][0]
         try:
-            raw_results = self._detector.predict(bgr_pixels)
+            raw_results = self._detector.predict(
+                bgr_pages,
+                batch_size=min(TEXT_DETECTION_BATCH_SIZE, len(bgr_pages)),
+            )
         except Exception as error:
             raise OCRProcessingError(
-                f"Text detection failed on page {page_number}."
+                f"Text detection failed on page {first_page_number}."
             ) from error
 
         try:
             results = list(raw_results)
         except (TypeError, ValueError) as error:
             raise OCRProcessingError(
-                f"Malformed detector response on page {page_number}: "
+                f"Malformed detector response on page {first_page_number}: "
                 "result is not iterable."
             ) from error
         if not results:
             return []
-        if len(results) != 1 or not isinstance(results[0], Mapping):
+        if len(results) != len(pages):
             raise OCRProcessingError(
-                f"Malformed detector response on page {page_number}: "
-                "expected exactly one page result."
+                f"Malformed detector response on page {first_page_number}: "
+                f"expected {len(pages)} page results, received "
+                f"{len(results)}."
             )
 
-        result = results[0]
+        pending: list[_PendingRecognition] = []
+        try:
+            for (page_number, image), result in zip(
+                pages,
+                results,
+                strict=True,
+            ):
+                if not isinstance(result, Mapping):
+                    raise OCRProcessingError(
+                        f"Malformed detector response on page {page_number}: "
+                        "expected a page result mapping."
+                    )
+                pending.extend(
+                    self._prepare_page_recognition(
+                        page_number,
+                        image,
+                        result,
+                    )
+                )
+            return self._recognize_pending(document_id, pending)
+        finally:
+            for item in pending:
+                item.crop.close()
+
+    def _prepare_page_recognition(
+        self,
+        page_number: int,
+        image: Image.Image,
+        result: Mapping[str, object],
+    ) -> list[_PendingRecognition]:
+        page_width, page_height = image.size
         if "dt_polys" not in result or "dt_scores" not in result:
             raise OCRProcessingError(
                 f"Malformed detector response on page {page_number}: "
@@ -478,70 +544,116 @@ class LocalOCRAdapter(OCRProvider):
                 "dt_polys and dt_scores have different lengths."
             )
 
-        blocks: list[OCRBlock] = []
-        for region_number, (polygon, raw_score) in enumerate(
-            zip(polygons, scores, strict=True),
-            start=1,
-        ):
-            confidence = _to_finite_float(
-                raw_score,
-                f"region {region_number} confidence",
-                page_number,
-            )
-            if not 0.0 <= confidence <= 1.0:
-                raise OCRProcessingError(
-                    f"Malformed detector response on page {page_number}: "
-                    f"region {region_number} confidence {confidence} is outside "
-                    "0.0-1.0."
+        pending: list[_PendingRecognition] = []
+        try:
+            for region_number, (polygon, raw_score) in enumerate(
+                zip(polygons, scores, strict=True),
+                start=1,
+            ):
+                confidence = _to_finite_float(
+                    raw_score,
+                    f"region {region_number} confidence",
+                    page_number,
                 )
-
-            left, top, right, bottom = _polygon_bounds(
-                polygon,
-                page_number,
-                region_number,
-            )
-            left = min(max(left, 0.0), float(page_width))
-            right = min(max(right, 0.0), float(page_width))
-            top = min(max(top, 0.0), float(page_height))
-            bottom = min(max(bottom, 0.0), float(page_height))
-            if right <= left or bottom <= top:
-                continue
-
-            crop_left = min(max(math.floor(left), 0), page_width)
-            crop_top = min(max(math.floor(top), 0), page_height)
-            crop_right = min(max(math.ceil(right), 0), page_width)
-            crop_bottom = min(max(math.ceil(bottom), 0), page_height)
-            if crop_right <= crop_left or crop_bottom <= crop_top:
-                continue
-
-            with image.crop(
-                (crop_left, crop_top, crop_right, crop_bottom)
-            ) as crop:
-                try:
-                    text = self._recognizer.predict(crop)
-                except Exception as error:
+                if not 0.0 <= confidence <= 1.0:
                     raise OCRProcessingError(
-                        f"Text recognition failed on page {page_number}, "
-                        f"region {region_number}."
-                    ) from error
-            if not isinstance(text, str):
+                        f"Malformed detector response on page {page_number}: "
+                        f"region {region_number} confidence {confidence} is "
+                        "outside 0.0-1.0."
+                    )
+
+                left, top, right, bottom = _polygon_bounds(
+                    polygon,
+                    page_number,
+                    region_number,
+                )
+                left = min(max(left, 0.0), float(page_width))
+                right = min(max(right, 0.0), float(page_width))
+                top = min(max(top, 0.0), float(page_height))
+                bottom = min(max(bottom, 0.0), float(page_height))
+                if right <= left or bottom <= top:
+                    continue
+
+                crop_left = min(max(math.floor(left), 0), page_width)
+                crop_top = min(max(math.floor(top), 0), page_height)
+                crop_right = min(max(math.ceil(right), 0), page_width)
+                crop_bottom = min(max(math.ceil(bottom), 0), page_height)
+                if crop_right <= crop_left or crop_bottom <= crop_top:
+                    continue
+
+                pending.append(
+                    _PendingRecognition(
+                        page_number=page_number,
+                        region_number=region_number,
+                        crop=image.crop(
+                            (crop_left, crop_top, crop_right, crop_bottom)
+                        ),
+                        bbox_x=left / page_width,
+                        bbox_y=top / page_height,
+                        bbox_width=(right - left) / page_width,
+                        bbox_height=(bottom - top) / page_height,
+                        confidence=confidence,
+                    )
+                )
+            return pending
+        except Exception:
+            for item in pending:
+                item.crop.close()
+            raise
+
+    def _recognize_pending(
+        self,
+        document_id: str,
+        pending: list[_PendingRecognition],
+    ) -> list[OCRBlock]:
+        blocks: list[OCRBlock] = []
+        for start in range(0, len(pending), TEXT_RECOGNITION_BATCH_SIZE):
+            batch = pending[start : start + TEXT_RECOGNITION_BATCH_SIZE]
+            first = batch[0]
+            try:
+                texts = self._recognizer.predict_batch(
+                    [item.crop for item in batch]
+                )
+            except Exception as error:
                 raise OCRProcessingError(
-                    f"Malformed VietOCR response on page {page_number}, "
-                    f"region {region_number}: expected text."
+                    f"Text recognition failed on page {first.page_number}, "
+                    f"region {first.region_number}."
+                ) from error
+            if isinstance(texts, (str, bytes)) or not isinstance(
+                texts,
+                Iterable,
+            ):
+                raise OCRProcessingError(
+                    f"Malformed VietOCR response on page {first.page_number}, "
+                    f"region {first.region_number}: expected a text batch."
+                )
+            text_items = list(texts)
+            if len(text_items) != len(batch):
+                raise OCRProcessingError(
+                    f"Malformed VietOCR response on page {first.page_number}, "
+                    f"region {first.region_number}: expected {len(batch)} "
+                    f"texts, received {len(text_items)}."
                 )
 
-            blocks.append(
-                OCRBlock(
-                    id=str(uuid4()),
-                    document_id=document_id,
-                    page_number=page_number,
-                    text=text,
-                    bbox_x=left / page_width,
-                    bbox_y=top / page_height,
-                    bbox_width=(right - left) / page_width,
-                    bbox_height=(bottom - top) / page_height,
-                    confidence=confidence,
-                    created_at=datetime.now(UTC),
+            for item, text in zip(batch, text_items, strict=True):
+                if not isinstance(text, str):
+                    raise OCRProcessingError(
+                        f"Malformed VietOCR response on page "
+                        f"{item.page_number}, region {item.region_number}: "
+                        "expected text."
+                    )
+                blocks.append(
+                    OCRBlock(
+                        id=str(uuid4()),
+                        document_id=document_id,
+                        page_number=item.page_number,
+                        text=text,
+                        bbox_x=item.bbox_x,
+                        bbox_y=item.bbox_y,
+                        bbox_width=item.bbox_width,
+                        bbox_height=item.bbox_height,
+                        confidence=item.confidence,
+                        created_at=datetime.now(UTC),
+                    )
                 )
-            )
         return blocks

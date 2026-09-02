@@ -28,13 +28,15 @@ class FakeDetector:
     ) -> None:
         self.results = results if results is not None else []
         self.error = error
-        self.calls: list[NDArray[np.uint8]] = []
+        self.calls: list[tuple[list[NDArray[np.uint8]], int]] = []
 
     def predict(
         self,
-        image: NDArray[np.uint8],
+        images: list[NDArray[np.uint8]],
+        *,
+        batch_size: int,
     ) -> list[Mapping[str, object]]:
-        self.calls.append(image.copy())
+        self.calls.append(([image.copy() for image in images], batch_size))
         if self.error is not None:
             raise self.error
         return self.results
@@ -49,12 +51,16 @@ class FakeRecognizer:
         self.text = text
         self.error = error
         self.crop_sizes: list[tuple[int, int]] = []
+        self.batch_sizes: list[int] = []
 
-    def predict(self, image: Image.Image) -> str:
-        self.crop_sizes.append(image.size)
+    def predict_batch(self, images: list[Image.Image]) -> list[str]:
+        self.crop_sizes.extend(image.size for image in images)
+        self.batch_sizes.append(len(images))
         if self.error is not None:
             raise self.error
-        return cast(str, self.text)
+        if isinstance(self.text, list):
+            return cast(list[str], self.text)
+        return [cast(str, self.text) for _ in images]
 
 
 class FakeCheckboxDetector:
@@ -302,8 +308,10 @@ def test_repeated_image_extract_reuses_models_and_maps_evidence(
     )
 
     assert len(detector.calls) == 2
-    assert detector.calls[0][0, 0].tolist() == [30, 20, 10]
+    assert detector.calls[0][0][0][0, 0].tolist() == [30, 20, 10]
+    assert [batch_size for _, batch_size in detector.calls] == [1, 1]
     assert recognizer.crop_sizes == [(81, 51), (81, 51)]
+    assert recognizer.batch_sizes == [1, 1]
     assert len(first) == len(second) == 1
     block = first[0]
     assert block.document_id == "document-1"
@@ -501,6 +509,62 @@ def test_recognizer_failure_includes_page_and_region_context(
         )
 
 
+def test_recognition_regions_are_processed_in_bounded_batches(
+    tmp_path: Path,
+    model_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_path = tmp_path / "input.png"
+    _write_image(image_path, size=(200, 80))
+    polygons: list[object] = [
+        [[x, 10], [x + 5, 10], [x + 5, 20], [x, 20]]
+        for x in range(1, 171, 10)
+    ]
+    detector = FakeDetector(_single_result(polygons, [0.9] * len(polygons)))
+    recognizer = FakeRecognizer()
+    adapter = _build_adapter(
+        monkeypatch,
+        model_root,
+        detector,
+        recognizer,
+    )
+
+    blocks = adapter.extract(
+        "document-1", DocumentType.CCCD_FRONT, str(image_path)
+    )
+
+    assert len(blocks) == 17
+    assert recognizer.batch_sizes == [16, 1]
+    assert len(recognizer.crop_sizes) == 17
+
+
+def test_mismatched_recognition_batch_size_fails_clearly(
+    tmp_path: Path,
+    model_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_path = tmp_path / "input.png"
+    _write_image(image_path)
+    polygons: list[object] = [
+        [[10, 10], [20, 10], [20, 20], [10, 20]],
+        [[30, 10], [40, 10], [40, 20], [30, 20]],
+    ]
+    adapter = _build_adapter(
+        monkeypatch,
+        model_root,
+        FakeDetector(_single_result(polygons, [0.9, 0.8])),
+        FakeRecognizer(text=["only one result"]),
+    )
+
+    with pytest.raises(
+        OCRProcessingError,
+        match="expected 2 texts, received 1",
+    ):
+        adapter.extract(
+            "document-1", DocumentType.CCCD_FRONT, str(image_path)
+        )
+
+
 def test_pdf_pages_are_processed_in_one_based_order(
     tmp_path: Path,
     model_root: Path,
@@ -513,6 +577,7 @@ def test_pdf_pages_are_processed_in_one_based_order(
             [[[1, 1], [9, 1], [9, 9], [1, 9]]],
             [0.8],
         )
+        * 2
     )
     adapter = _build_adapter(
         monkeypatch,
@@ -533,6 +598,9 @@ def test_pdf_pages_are_processed_in_one_based_order(
 
     assert [block.page_number for block in blocks] == [1, 2]
     assert [block.bbox_width for block in blocks] == pytest.approx([0.8, 0.4])
+    assert len(detector.calls) == 1
+    assert len(detector.calls[0][0]) == 2
+    assert detector.calls[0][1] == 2
 
 
 def test_missing_input_file_fails(

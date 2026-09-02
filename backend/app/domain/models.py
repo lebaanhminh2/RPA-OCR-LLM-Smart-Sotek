@@ -61,3 +61,21 @@ class OCRBlock:
     confidence: float
     created_at: datetime
     block_kind: OCRBlockKind = OCRBlockKind.TEXT
+
+
+@dataclass
+class ExtractedField:
+    id: str
+    case_id: str
+    field_code: str
+    original_value: str | None
+    current_value: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class FieldSource:
+    id: str
+    extracted_field_id: str
+    ocr_block_id: str

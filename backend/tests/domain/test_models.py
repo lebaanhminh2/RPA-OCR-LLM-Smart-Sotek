@@ -9,6 +9,8 @@ from app.domain.models import (
     Document,
     DocumentOcrStatus,
     DocumentType,
+    ExtractedField,
+    FieldSource,
     OCRBlock,
     OCRBlockKind,
 )
@@ -133,6 +135,75 @@ def test_ocr_block_is_immutable() -> None:
 
     with pytest.raises(FrozenInstanceError):
         setattr(ocr_block, "bbox_x", 0.5)
+
+
+def test_extracted_field_preserves_supplied_values_and_has_exact_fields() -> None:
+    created_at = datetime(2026, 9, 2, 9, 0, tzinfo=UTC)
+    updated_at = datetime(2026, 9, 2, 9, 30, tzinfo=UTC)
+
+    extracted_field = ExtractedField(
+        id="field-1",
+        case_id="case-1",
+        field_code="ho_ten",
+        original_value="NGUYEN VAN A",
+        current_value="NGUYEN VAN A",
+        created_at=created_at,
+        updated_at=updated_at,
+    )
+
+    assert extracted_field.id == "field-1"
+    assert extracted_field.case_id == "case-1"
+    assert extracted_field.field_code == "ho_ten"
+    assert extracted_field.original_value == "NGUYEN VAN A"
+    assert extracted_field.current_value == "NGUYEN VAN A"
+    assert extracted_field.created_at is created_at
+    assert extracted_field.updated_at is updated_at
+    assert [field.name for field in fields(ExtractedField)] == [
+        "id",
+        "case_id",
+        "field_code",
+        "original_value",
+        "current_value",
+        "created_at",
+        "updated_at",
+    ]
+
+
+def test_extracted_field_accepts_missing_value() -> None:
+    timestamp = datetime(2026, 9, 2, 9, 0, tzinfo=UTC)
+
+    extracted_field = ExtractedField(
+        id="field-1",
+        case_id="case-1",
+        field_code="so_cccd",
+        original_value=None,
+        current_value=None,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+
+    assert extracted_field.original_value is None
+    assert extracted_field.current_value is None
+
+
+def test_field_source_preserves_supplied_values_and_is_immutable() -> None:
+    source = FieldSource(
+        id="source-1",
+        extracted_field_id="field-1",
+        ocr_block_id="ocr-block-1",
+    )
+
+    assert source.id == "source-1"
+    assert source.extracted_field_id == "field-1"
+    assert source.ocr_block_id == "ocr-block-1"
+    assert [field.name for field in fields(FieldSource)] == [
+        "id",
+        "extracted_field_id",
+        "ocr_block_id",
+    ]
+
+    with pytest.raises(FrozenInstanceError):
+        setattr(source, "ocr_block_id", "ocr-block-2")
 
 
 def test_case_status_has_exact_names_and_values() -> None:

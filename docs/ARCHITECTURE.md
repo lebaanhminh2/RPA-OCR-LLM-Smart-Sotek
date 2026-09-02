@@ -163,7 +163,7 @@ project-root/
   schema JSON đã định nghĩa sẵn
   (field_code, value, source_ids), và validate kết quả trả về bằng Pydantic. Model
   chỉ được chọn source_id có sẵn trong input, không được tự sinh toạ độ hay
-  source_id mới. Field không tìm thấy dùng `value = null, source_ids = []`; field có value phải có ít nhất một source_id hợp lệ. Validate nghiêm trước khi lưu. Vì đây là API free tier có giới hạn request/phút, module này nên có cơ chế
+  source_id mới. Field không tìm thấy dùng `value = null, source_ids = []`; field có value phải có ít nhất một source_id hợp lệ. Validate nghiêm trước khi lưu. Nếu riêng một field có value/source không hợp lệ, Extraction Service loại bỏ value không đáng tin và lưu field đó thành `null`/không source để chuyên viên nhập tay; các field hợp lệ khác vẫn được giữ và case vẫn sang Review. Chỉ lỗi cấp pipeline như OCR lỗi, Gemini hết retry, response không parse được hoặc persistence lỗi mới chuyển case sang `FAILED`. Vì đây là API free tier có giới hạn request/phút, module này nên có cơ chế
   retry/backoff đơn giản khi bị rate-limit (chi tiết cụ thể sẽ nằm trong
   DEVELOPMENT_RULES.md / khi code, không bàn sâu ở đây).
 

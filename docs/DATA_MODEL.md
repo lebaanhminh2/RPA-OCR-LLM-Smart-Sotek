@@ -43,7 +43,7 @@ Giải thích các điểm dễ nhầm:
 |---|---|
 | `UPLOADING` | Đã tạo case, đang chờ đủ 4 loại giấy tờ. |
 | `PROCESSING` | Đã đủ 4 giấy tờ, đang chạy OCR + LLM ở nền (BackgroundTasks). |
-| `READY_FOR_REVIEW` | OCR + LLM xong, ExtractedField/FieldSource đã có dữ liệu, chờ chuyên viên xem/sửa. |
+| `READY_FOR_REVIEW` | OCR + LLM xong, đủ danh mục ExtractedField để chuyên viên xem/sửa; một phần hoặc toàn bộ field có thể null nếu không tìm thấy hoặc bằng chứng LLM không hợp lệ. |
 | `COMPLETED` | Chuyên viên đã bấm Upload — dữ liệu cuối đã được lưu. |
 | `FAILED` | OCR hoặc LLM lỗi giữa chừng (để tránh case bị "treo" không rõ trạng thái). |
 
@@ -57,7 +57,9 @@ Document, sau đó **bất biến (immutable)** — không entity nào khác đ�
 text, loại block hoặc bbox của nó.
 
 **ExtractedField**: được tạo 1 lần khi LLM extraction chạy xong (giá trị ban đầu
-= `original_value`). Sau đó `current_value` có thể được chuyên viên sửa nhiều
+= `original_value`). Field LLM không tìm thấy hoặc trả value/source không hợp lệ
+được lưu `original_value = current_value = null`, không có `FieldSource`, để
+chuyên viên nhập tay thay vì chặn cả hồ sơ. Sau đó `current_value` có thể được chuyên viên sửa nhiều
 lần trong lúc review — mỗi lần sửa tạo thêm 1 dòng `ReviewAction` để lưu vết,
 không tạo `ExtractedField` mới.
 
@@ -128,7 +130,7 @@ Review UI hiển thị bằng chứng có ý nghĩa.
 | id | string (UUID) | ✔ | Khoá chính |
 | case_id | FK → Case.id | ✔ | |
 | field_code | string | ✔ | Mã trường nghiệp vụ. Danh mục field MVP được chốt trong `EXTRACTION_SCHEMA.md`, không invent field_code trong code. |
-| original_value | string (nullable) | ✗ | Giá trị LLM trích xuất ban đầu — **bất biến**. Null khi field không tìm thấy trong tài liệu. |
+| original_value | string (nullable) | ✗ | Giá trị LLM trích xuất ban đầu — **bất biến**. Null khi field không tìm thấy hoặc value/source do LLM trả về không vượt qua validation. |
 | current_value | string (nullable) | ✗ | Giá trị hiện tại — mặc định = original_value; chuyên viên có thể nhập/sửa trong Review UI. |
 | created_at | datetime | ✔ | |
 | updated_at | datetime | ✔ | Cập nhật mỗi khi current_value đổi |

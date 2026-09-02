@@ -23,6 +23,14 @@
 - Có giá trị: `value` là chuỗi khác rỗng và `source_ids` có ít nhất một ID của
   `OCRBlock` đã có trong input của đúng case.
 - LLM không được tạo `source_id` hoặc bounding box.
+- Partial extraction là hành vi mặc định của MVP: nếu một field có value rỗng,
+  thiếu source hoặc source không tồn tại, backend không lưu value đó mà tạo
+  `ExtractedField` tương ứng với `original_value = current_value = null` và
+  không có `FieldSource`. Các field hợp lệ khác vẫn được giữ để chuyên viên
+  review; luôn có đủ đúng 40 `ExtractedField`.
+- Case vẫn có thể `READY_FOR_REVIEW` khi nhiều hoặc toàn bộ field null để chuyên
+  viên nhập tay. Chỉ lỗi cấp pipeline (OCR, Gemini hết retry/response không
+  parse được, persistence) mới chuyển case sang `FAILED`.
 - Mọi `field_code` ngoài catalog này đều bị từ chối.
 - Các giá trị từ checkbox được local OMR chuẩn hoá thành evidence block trước
   khi gửi LLM; Gemini không tự suy đoán dấu tick từ text OCR.

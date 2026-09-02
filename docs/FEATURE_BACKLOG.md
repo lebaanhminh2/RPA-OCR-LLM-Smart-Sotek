@@ -1049,8 +1049,10 @@ retry/backoff.
 - Dùng đúng SDK `google-genai==2.21.0` (không dùng legacy
   `google-generativeai`) và model `gemini-3.7-flash`.
 - Gọi Gemini API (free tier) với document-aware input và schema JSON định sẵn
-  (`field_code`, `value`, `source_ids`), validate response bằng Pydantic và
-  theo `docs/EXTRACTION_SCHEMA.md`.
+  (`field_code`, `value`, `source_ids`), validate cấu trúc/catalog response bằng
+  Pydantic. Validation nghiệp vụ từng field (value/source tồn tại) nằm ở
+  Extraction Service để hỗ trợ partial extraction theo
+  `docs/EXTRACTION_SCHEMA.md`.
 - Retry/backoff giới hạn số lần khi gặp lỗi 429 (DEVELOPMENT_RULES.md §14) —
   không retry vô hạn.
 - API key đọc từ biến môi trường, không hard-code.
@@ -1078,7 +1080,9 @@ trước khi làm. Trong app/infra/llm/gemini_extractor.py, implement interface
 LLMProvider: dùng google-genai==2.21.0 gọi model gemini-3.7-flash (Google AI
 Studio free tier) với document-aware input và structured
 output schema JSON định sẵn (field_code, value, source_ids), validate response
-bằng Pydantic và theo docs/EXTRACTION_SCHEMA.md. value=null phải đi cùng source_ids=[]; value có dữ liệu phải có ít nhất một source_id. API key đọc từ biến môi trường (GEMINI_API_KEY), không
+bằng Pydantic ở mức cấu trúc/catalog. Giữ nguyên value/source_ids để
+Extraction Service validate nghiệp vụ từng field và áp dụng partial extraction
+theo docs/EXTRACTION_SCHEMA.md. API key đọc từ biến môi trường (GEMINI_API_KEY), không
 hard-code. Có cơ chế retry/backoff đơn giản khi gặp lỗi rate-limit (429), giới
 hạn số lần retry rõ ràng (ví dụ tối đa 3 lần), không được retry vô hạn - sau
 khi hết số lần retry, raise lỗi rõ ràng để tầng gọi xử lý (chuyển Case.status
@@ -1137,13 +1141,20 @@ rộng).
 - Sau khi tất cả document có `ocr_status = DONE`, gọi `LLMProvider` với toàn
   bộ `OCRBlock` của case được nhóm thành `LLMDocumentInput` kèm đúng
   `document_id`/`document_type`.
-- **Validate nghiêm:** `value = null` chỉ hợp lệ khi `source_ids = []`; nếu field có value thì phải có ít nhất 1 `source_id`, và mọi `source_id` phải tồn tại trong `OCRBlock` đã lưu của case đó. LLM không được tự tạo bbox/source id.
+- **Validate nghiêm theo từng field:** nếu field có value thì value phải khác
+  rỗng, có ít nhất 1 `source_id`, và mọi `source_id` phải tồn tại trong
+  `OCRBlock` đã lưu của case đó. Field không đạt bị hạ thành null/không source,
+  không lưu value không đáng tin; LLM không được tự tạo bbox/source id.
+- Luôn tạo đủ đúng 40 `ExtractedField`, kể cả field missing/invalid. Partial
+  extraction vẫn chuyển `READY_FOR_REVIEW` để chuyên viên điền ô trống.
 - Lưu `ExtractedField` + `FieldSource`, chuyển `Case.status → READY_FOR_REVIEW`
-  (hoặc `FAILED` nếu LLM lỗi/validate thất bại sau retry).
+  (hoặc `FAILED` nếu lỗi cấp pipeline như OCR lỗi, LLM hết retry/response không
+  parse được, hoặc persistence lỗi).
 
 **Acceptance criteria:**
 - [ ] Sau OCR xong cả 4 document, LLM tự chạy, tạo đúng `ExtractedField`.
-- [ ] Field missing (`value=null`, `source_ids=[]`) được giữ để Review UI có thể hiển thị ô trống; field có value nhưng thiếu/sai source_id bị chặn.
+- [ ] Field missing hoặc có value nhưng thiếu/sai source_id được lưu thành ô
+      trống; field hợp lệ vẫn được giữ và tổng cộng luôn đủ 40 field.
 - [ ] `Case.status` chuyển đúng `PROCESSING → READY_FOR_REVIEW` hoặc
       `→ FAILED`.
 
@@ -1162,10 +1173,13 @@ DATA_MODEL.md mục 3, và ARCHITECTURE.md mục 6 (Mapping) trước khi làm. 
 rộng app/domain/services/extraction_service.py: sau khi tất cả document của 1
 case có ocr_status = DONE, nhóm toàn bộ OCRBlock theo document và gọi
 LLMProvider (qua interface, không import Gemini SDK trực tiếp) bằng danh sách
-LLMDocumentInput có document_id/document_type. Validate nghiêm theo
-docs/EXTRACTION_SCHEMA.md: value=null chỉ hợp lệ khi source_ids=[]; nếu value có dữ liệu thì phải có ít nhất 1 source_id và mọi source_id phải khớp OCRBlock đã có trong case. Nếu sai, CHẶN field đó - đây là rule cứng, không được nới lỏng. Lưu ExtractedField + FieldSource hợp lệ, chuyển Case.status
-sang READY_FOR_REVIEW. Nếu LLM lỗi sau khi hết retry hoặc toàn bộ field đều bị
-validate chặn, chuyển Case.status sang FAILED. Viết unit test dùng fake
+LLMDocumentInput có document_id/document_type. Validate nghiêm theo từng field
+theo docs/EXTRACTION_SCHEMA.md: value có dữ liệu phải khác rỗng, có ít nhất 1
+source_id và mọi source_id phải khớp OCRBlock đã có trong case. Nếu sai, không
+lưu value không đáng tin mà tạo field null/không source để chuyên viên nhập tay.
+Luôn lưu đủ đúng 40 ExtractedField và chuyển sang READY_FOR_REVIEW, kể cả partial
+extraction hoặc toàn bộ field null. Chỉ chuyển FAILED khi lỗi cấp pipeline như
+OCR lỗi, Gemini hết retry/response không parse được hoặc persistence lỗi. Viết unit test dùng fake
 LLMProvider, bao gồm test case: field hợp lệ được lưu đúng, field có
 source_id sai bị chặn, LLM lỗi -> case FAILED.
 ```

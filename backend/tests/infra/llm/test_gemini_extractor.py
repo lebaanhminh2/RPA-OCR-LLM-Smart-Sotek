@@ -6,7 +6,11 @@ import pytest
 from google.genai import errors, types
 
 from app.domain.models import DocumentType, OCRBlock, OCRBlockKind
-from app.domain.ports.llm_provider import MVP_FIELD_CODES, LLMDocumentInput
+from app.domain.ports.llm_provider import (
+    MVP_FIELD_CODES,
+    MVP_FIELD_SOURCE_RULES,
+    LLMDocumentInput,
+)
 from app.infra.llm.gemini_extractor import (
     GEMINI_MODEL,
     GeminiConfigurationError,
@@ -136,6 +140,17 @@ def test_extract_uses_document_aware_prompt_and_structured_output() -> None:
     assert prompt["documents"][0]["blocks"][0]["source_id"] == (
         "source-ho-ten"
     )
+    assert set(prompt["field_source_rules"]) == set(MVP_FIELD_CODES)
+    assert prompt["field_source_rules"]["email"] == [
+        {"document_type": "LOAN_APPLICATION", "block_kind": "TEXT"}
+    ]
+    assert prompt["field_source_rules"]["tinh_trang_hon_nhan"] == [
+        {
+            "document_type": "LOAN_APPLICATION",
+            "block_kind": "CHECKBOX_SELECTION",
+        }
+    ]
+    assert set(MVP_FIELD_SOURCE_RULES) == set(MVP_FIELD_CODES)
 
     config = cast(types.GenerateContentConfig, call["config"])
     assert config.response_mime_type == "application/json"

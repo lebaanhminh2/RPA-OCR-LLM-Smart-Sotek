@@ -5,12 +5,15 @@ from app.domain.models import (
     CaseStatus,
     Document,
     DocumentOcrStatus,
+    DocumentType,
     ExtractedField,
     FieldSource,
     OCRBlock,
+    OCRBlockKind,
 )
 from app.domain.ports.llm_provider import (
     MVP_FIELD_CODES,
+    MVP_FIELD_SOURCE_RULES,
     LLMDocumentInput,
     LLMExtractedField,
     LLMProvider,
@@ -102,6 +105,10 @@ class ExtractionService:
     def _process_llm(self, case_id: str, documents: list[Document]) -> None:
         llm_documents: list[LLMDocumentInput] = []
         blocks_by_id: dict[str, OCRBlock] = {}
+        source_constraints_by_id: dict[
+            str,
+            tuple[DocumentType, OCRBlockKind],
+        ] = {}
         for document in documents:
             blocks = self._repository.list_ocr_blocks_by_document_id(
                 document.id
@@ -110,6 +117,10 @@ class ExtractionService:
                 if block.id in blocks_by_id:
                     raise RuntimeError(f"Duplicate OCR source ID: {block.id}")
                 blocks_by_id[block.id] = block
+                source_constraints_by_id[block.id] = (
+                    document.document_type,
+                    block.block_kind,
+                )
             llm_documents.append(
                 LLMDocumentInput(
                     document_id=document.id,
@@ -123,6 +134,7 @@ class ExtractionService:
             case_id,
             llm_fields,
             blocks_by_id,
+            source_constraints_by_id,
         )
         self._repository.create_extracted_fields(fields, sources)
         updated_case = self._repository.update_case_status(
@@ -138,6 +150,10 @@ class ExtractionService:
         case_id: str,
         llm_fields: list[LLMExtractedField],
         blocks_by_id: dict[str, OCRBlock],
+        source_constraints_by_id: dict[
+            str,
+            tuple[DocumentType, OCRBlockKind],
+        ],
     ) -> tuple[list[ExtractedField], list[FieldSource]]:
         expected_codes = set(MVP_FIELD_CODES)
         fields_by_code: dict[str, LLMExtractedField] = {}
@@ -162,6 +178,7 @@ class ExtractionService:
             value, source_ids = ExtractionService._validated_field_value(
                 candidate,
                 blocks_by_id,
+                source_constraints_by_id,
             )
             field = ExtractedField(
                 id=str(uuid4()),
@@ -187,6 +204,10 @@ class ExtractionService:
     def _validated_field_value(
         field: LLMExtractedField | None,
         blocks_by_id: dict[str, OCRBlock],
+        source_constraints_by_id: dict[
+            str,
+            tuple[DocumentType, OCRBlockKind],
+        ],
     ) -> tuple[str | None, list[str]]:
         if field is None or field.value is None or not field.value.strip():
             return None, []
@@ -194,6 +215,12 @@ class ExtractionService:
         source_ids = list(dict.fromkeys(field.source_ids))
         if not source_ids or any(
             source_id not in blocks_by_id for source_id in source_ids
+        ):
+            return None, []
+        allowed_sources = MVP_FIELD_SOURCE_RULES[field.field_code]
+        if any(
+            source_constraints_by_id.get(source_id) not in allowed_sources
+            for source_id in source_ids
         ):
             return None, []
         return field.value, source_ids

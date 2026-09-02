@@ -9,6 +9,7 @@ from app.domain.models import (
     ExtractedField,
     FieldSource,
     OCRBlock,
+    OCRBlockKind,
 )
 from app.domain.ports.llm_provider import (
     MVP_FIELD_CODES,
@@ -113,8 +114,13 @@ class FakeRepository:
 
 
 class FakeOCRProvider:
-    def __init__(self, failing_document_ids: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        failing_document_ids: set[str] | None = None,
+        block_kinds: dict[str, OCRBlockKind] | None = None,
+    ) -> None:
         self.failing_document_ids = failing_document_ids or set()
+        self.block_kinds = block_kinds or {}
         self.calls: list[tuple[str, DocumentType, str]] = []
 
     def extract(
@@ -138,6 +144,10 @@ class FakeOCRProvider:
                 bbox_height=0.1,
                 confidence=0.9,
                 created_at=datetime(2026, 9, 2, 8, 0, tzinfo=UTC),
+                block_kind=self.block_kinds.get(
+                    document_id,
+                    OCRBlockKind.TEXT,
+                ),
             )
         ]
 
@@ -170,12 +180,14 @@ def make_null_llm_fields() -> list[LLMExtractedField]:
 
 
 def make_llm_fields_with(
-    field: LLMExtractedField,
+    *fields: LLMExtractedField,
 ) -> list[LLMExtractedField]:
+    fields_by_code = {field.field_code: field for field in fields}
     return [
-        field
-        if code == field.field_code
-        else LLMExtractedField(field_code=code, value=None, source_ids=[])
+        fields_by_code.get(
+            code,
+            LLMExtractedField(field_code=code, value=None, source_ids=[]),
+        )
         for code in MVP_FIELD_CODES
     ]
 
@@ -322,6 +334,87 @@ def test_invalid_source_becomes_blank_field_without_failing_case() -> None:
     assert by_code["ho_ten"].current_value is None
     assert repository.field_sources == []
     assert repository.cases[case.id].status is CaseStatus.READY_FOR_REVIEW
+
+
+def test_disallowed_document_or_block_kind_becomes_blank_field() -> None:
+    case = make_case()
+    documents = [
+        make_document("front", DocumentType.CCCD_FRONT),
+        make_document("back", DocumentType.CCCD_BACK),
+        make_document("application", DocumentType.LOAN_APPLICATION),
+        make_document("contract", DocumentType.LABOR_CONTRACT),
+    ]
+    repository = FakeRepository(case, documents)
+    llm_provider = FakeLLMProvider(
+        make_llm_fields_with(
+            LLMExtractedField(
+                field_code="email",
+                value="synthetic@example.test",
+                source_ids=["block-back"],
+            ),
+            LLMExtractedField(
+                field_code="tinh_trang_hon_nhan",
+                value="Äá»™c thÃ¢n",
+                source_ids=["block-application"],
+            ),
+            LLMExtractedField(
+                field_code="hinh_thuc_nhan_luong",
+                value="Chuyá»ƒn khoáº£n",
+                source_ids=["block-contract"],
+            ),
+        )
+    )
+    service = ExtractionService(
+        repository,
+        FakeOCRProvider(),
+        llm_provider,
+    )
+
+    service.process_case_ocr(case.id)
+
+    by_code = {field.field_code: field for field in repository.extracted_fields}
+    assert by_code["email"].original_value is None
+    assert by_code["tinh_trang_hon_nhan"].original_value is None
+    assert by_code["hinh_thuc_nhan_luong"].original_value == "Chuyá»ƒn khoáº£n"
+    assert [source.ocr_block_id for source in repository.field_sources] == [
+        "block-contract"
+    ]
+    assert repository.cases[case.id].status is CaseStatus.READY_FOR_REVIEW
+
+
+def test_loan_checkbox_source_is_accepted_for_checkbox_field() -> None:
+    case = make_case()
+    application = make_document(
+        "application",
+        DocumentType.LOAN_APPLICATION,
+    )
+    repository = FakeRepository(case, [application])
+    llm_provider = FakeLLMProvider(
+        make_llm_fields_with(
+            LLMExtractedField(
+                field_code="tinh_trang_hon_nhan",
+                value="Äá»™c thÃ¢n",
+                source_ids=["block-application"],
+            )
+        )
+    )
+    service = ExtractionService(
+        repository,
+        FakeOCRProvider(
+            block_kinds={
+                "application": OCRBlockKind.CHECKBOX_SELECTION,
+            }
+        ),
+        llm_provider,
+    )
+
+    service.process_case_ocr(case.id)
+
+    by_code = {field.field_code: field for field in repository.extracted_fields}
+    assert by_code["tinh_trang_hon_nhan"].original_value == "Äá»™c thÃ¢n"
+    assert [source.ocr_block_id for source in repository.field_sources] == [
+        "block-application"
+    ]
 
 
 def test_missing_and_duplicate_outputs_still_create_40_blankable_fields() -> None:

@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 from app.domain.models import OCRBlock
 from app.domain.ports.llm_provider import (
     MVP_FIELD_CODES,
+    MVP_FIELD_SOURCE_RULES,
     LLMDocumentInput,
     LLMExtractedField,
     LLMProvider,
@@ -32,6 +33,14 @@ Quy tắc bắt buộc:
 - muc_dich_vay có nhiều lựa chọn thì value là JSON array đã serialize thành chuỗi,
   ví dụ [\"Sửa nhà\",\"Học tập\"].
 - Không chuẩn hoá hoặc suy diễn ngoài nội dung tài liệu.
+""".strip()
+
+_SOURCE_GROUNDING_INSTRUCTION = """
+Enforce field_source_rules exactly for every returned source_id.
+A TEXT block containing a printed checkbox label or option is not evidence that
+the option was selected. Only CHECKBOX_SELECTION proves a selection on the loan
+application. When no allowed evidence exists, return value=null and
+source_ids=[].
 """.strip()
 
 
@@ -144,7 +153,9 @@ class GeminiExtractor(LLMProvider):
 
     def _generate_with_retry(self, prompt: str) -> types.GenerateContentResponse:
         config = types.GenerateContentConfig(
-            system_instruction=_SYSTEM_INSTRUCTION,
+            system_instruction=(
+                f"{_SYSTEM_INSTRUCTION}\n{_SOURCE_GROUNDING_INSTRUCTION}"
+            ),
             response_mime_type="application/json",
             response_json_schema=(
                 GeminiExtractionResponse.model_json_schema()
@@ -192,6 +203,19 @@ class GeminiExtractor(LLMProvider):
     def _build_prompt(documents: list[LLMDocumentInput]) -> str:
         payload = {
             "required_field_codes": list(MVP_FIELD_CODES),
+            "field_source_rules": {
+                field_code: [
+                    {
+                        "document_type": document_type.value,
+                        "block_kind": block_kind.value,
+                    }
+                    for document_type, block_kind in sorted(
+                        constraints,
+                        key=lambda item: (item[0].value, item[1].value),
+                    )
+                ]
+                for field_code, constraints in MVP_FIELD_SOURCE_RULES.items()
+            },
             "documents": [
                 {
                     "document_id": document.document_id,

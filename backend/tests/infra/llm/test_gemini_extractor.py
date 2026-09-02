@@ -10,6 +10,7 @@ from app.domain.ports.llm_provider import MVP_FIELD_CODES, LLMDocumentInput
 from app.infra.llm.gemini_extractor import (
     GEMINI_MODEL,
     GeminiConfigurationError,
+    GeminiExtractionResponse,
     GeminiExtractor,
     GeminiRateLimitError,
     GeminiResponseError,
@@ -137,8 +138,37 @@ def test_extract_uses_document_aware_prompt_and_structured_output() -> None:
 
     config = cast(types.GenerateContentConfig, call["config"])
     assert config.response_mime_type == "application/json"
-    assert config.response_schema is not None
+    assert config.response_schema is None
+    assert config.response_json_schema == (
+        GeminiExtractionResponse.model_json_schema()
+    )
     assert config.temperature == 0
+
+
+def test_extractor_retains_sdk_client_for_its_lifetime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generate_content = FakeGenerateContent([_response_json()])
+    created_clients: list[object] = []
+
+    class FakeModels:
+        def __init__(self) -> None:
+            self.generate_content = generate_content
+
+    class FakeClient:
+        def __init__(self, *, api_key: str) -> None:
+            assert api_key == "synthetic-api-key"
+            self.models = FakeModels()
+            created_clients.append(self)
+
+    monkeypatch.setattr(
+        "app.infra.llm.gemini_extractor.genai.Client",
+        FakeClient,
+    )
+
+    extractor = GeminiExtractor(api_key="synthetic-api-key")
+
+    assert extractor._client is created_clients[0]
 
 
 def test_extract_rejects_incomplete_field_catalog() -> None:

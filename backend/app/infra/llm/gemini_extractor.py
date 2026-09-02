@@ -103,12 +103,13 @@ class GeminiExtractor(LLMProvider):
         if initial_backoff_seconds < 0:
             raise ValueError("initial_backoff_seconds must not be negative")
 
+        self._client: genai.Client | None = None
         if generate_content is None:
             resolved_api_key = api_key or os.environ.get("GEMINI_API_KEY")
             if not resolved_api_key:
                 raise GeminiConfigurationError("GEMINI_API_KEY is required")
-            client = genai.Client(api_key=resolved_api_key)
-            generate_content = client.models.generate_content
+            self._client = genai.Client(api_key=resolved_api_key)
+            generate_content = self._client.models.generate_content
 
         self._generate_content = generate_content
         self._max_attempts = max_attempts
@@ -145,7 +146,9 @@ class GeminiExtractor(LLMProvider):
         config = types.GenerateContentConfig(
             system_instruction=_SYSTEM_INSTRUCTION,
             response_mime_type="application/json",
-            response_schema=GeminiExtractionResponse,
+            response_json_schema=(
+                GeminiExtractionResponse.model_json_schema()
+            ),
             temperature=0,
         )
 

@@ -121,7 +121,11 @@ def _build_adapter(
     checkbox_detector: FakeCheckboxDetector | None = None,
 ) -> LocalOCRAdapter:
     monkeypatch.setattr(ocr, "_load_detector", lambda _: detector)
-    monkeypatch.setattr(ocr, "_load_recognizer", lambda _config, _weights: recognizer)
+    monkeypatch.setattr(
+        ocr,
+        "_load_recognizer",
+        lambda _config, _weights, *, device: recognizer,
+    )
     return LocalOCRAdapter(model_root, checkbox_detector)
 
 
@@ -181,14 +185,19 @@ def test_model_loaders_are_called_once_during_initialization(
     detector = FakeDetector()
     recognizer = FakeRecognizer()
     detector_paths: list[Path] = []
-    recognizer_paths: list[tuple[Path, Path]] = []
+    recognizer_paths: list[tuple[Path, Path, str]] = []
 
     def load_detector(path: Path) -> FakeDetector:
         detector_paths.append(path)
         return detector
 
-    def load_recognizer(config: Path, weights: Path) -> FakeRecognizer:
-        recognizer_paths.append((config, weights))
+    def load_recognizer(
+        config: Path,
+        weights: Path,
+        *,
+        device: str,
+    ) -> FakeRecognizer:
+        recognizer_paths.append((config, weights, device))
         return recognizer
 
     monkeypatch.setattr(ocr, "_load_detector", load_detector)
@@ -201,6 +210,7 @@ def test_model_loaders_are_called_once_during_initialization(
         (
             (model_root / "vietocr" / "config.yml").resolve(),
             (model_root / "vietocr" / "weights.pth").resolve(),
+            "cpu",
         )
     ]
 
@@ -225,7 +235,38 @@ def test_paddle_loader_uses_local_model_directory_and_cpu(tmp_path: Path) -> Non
     assert calls == [(str(model_dir), "cpu", False)]
 
 
-def test_vietocr_loader_forces_local_cpu_configuration(tmp_path: Path) -> None:
+def test_recognition_device_defaults_to_cpu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(ocr.RECOGNITION_DEVICE_ENV, raising=False)
+
+    assert ocr._resolve_recognition_device() == "cpu"
+
+
+def test_recognition_device_uses_configured_cuda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(ocr.RECOGNITION_DEVICE_ENV, "CUDA:0")
+    monkeypatch.setattr(ocr, "_cuda_is_available", lambda: True)
+
+    assert ocr._resolve_recognition_device() == "cuda:0"
+
+
+def test_recognition_device_rejects_unavailable_cuda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ocr, "_cuda_is_available", lambda: False)
+
+    with pytest.raises(OCRConfigurationError, match="CUDA-enabled PyTorch"):
+        ocr._resolve_recognition_device("cuda:0")
+
+
+def test_recognition_device_rejects_unknown_value() -> None:
+    with pytest.raises(OCRConfigurationError, match="Unsupported"):
+        ocr._resolve_recognition_device("auto")
+
+
+def test_vietocr_loader_uses_requested_local_device(tmp_path: Path) -> None:
     config_path = (tmp_path / "config.yml").resolve()
     weights_path = (tmp_path / "weights.pth").resolve()
     config: dict[str, object] = {
@@ -249,6 +290,7 @@ def test_vietocr_loader_forces_local_cpu_configuration(tmp_path: Path) -> None:
     loaded = ocr._load_recognizer(
         config_path,
         weights_path,
+        device="cuda:0",
         config_loader=config_loader,
         predictor_factory=predictor_factory,
     )
@@ -257,7 +299,7 @@ def test_vietocr_loader_forces_local_cpu_configuration(tmp_path: Path) -> None:
     assert loaded_paths == [str(config_path)]
     assert received_configs == [config]
     assert config["weights"] == str(weights_path)
-    assert config["device"] == "cpu"
+    assert config["device"] == "cuda:0"
     assert config["cnn"] == {"pretrained": False}
     assert config["predictor"] == {"beamsearch": False}
 

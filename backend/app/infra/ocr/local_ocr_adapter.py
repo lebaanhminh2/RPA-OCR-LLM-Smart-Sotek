@@ -30,6 +30,8 @@ from app.infra.ocr.checkbox_detector import (
 PDF_RENDER_SCALE = 2.0
 TEXT_DETECTION_BATCH_SIZE = 2
 TEXT_RECOGNITION_BATCH_SIZE = 16
+RECOGNITION_DEVICE_ENV = "OCR_RECOGNITION_DEVICE"
+SUPPORTED_RECOGNITION_DEVICES = frozenset({"cpu", "cuda:0"})
 LOAN_TEMPLATE_PATH_ENV = "OCR_LOAN_APPLICATION_TEMPLATE_PATH"
 LOAN_TEMPLATE_CONFIG = (
     Path(__file__).resolve().parent
@@ -127,6 +129,33 @@ def _ensure_vietocr_pillow_compatibility() -> None:
         setattr(Image, "ANTIALIAS", Image.Resampling.LANCZOS)
 
 
+def _cuda_is_available() -> bool:
+    try:
+        import torch
+    except Exception:
+        return False
+    return bool(torch.cuda.is_available())
+
+
+def _resolve_recognition_device(configured_device: str | None = None) -> str:
+    raw_device = configured_device
+    if raw_device is None:
+        raw_device = os.getenv(RECOGNITION_DEVICE_ENV, "cpu")
+    device = raw_device.strip().lower()
+    if device not in SUPPORTED_RECOGNITION_DEVICES:
+        supported = ", ".join(sorted(SUPPORTED_RECOGNITION_DEVICES))
+        raise OCRConfigurationError(
+            f"Unsupported {RECOGNITION_DEVICE_ENV} value: {raw_device!r}. "
+            f"Expected one of: {supported}."
+        )
+    if device == "cuda:0" and not _cuda_is_available():
+        raise OCRConfigurationError(
+            f"{RECOGNITION_DEVICE_ENV}=cuda:0 requires a CUDA-enabled "
+            "PyTorch runtime and an available NVIDIA GPU."
+        )
+    return device
+
+
 def _load_detector(
     model_dir: Path,
     factory: _DetectorFactory | None = None,
@@ -154,6 +183,8 @@ def _load_detector(
 def _load_recognizer(
     config_path: Path,
     weights_path: Path,
+    *,
+    device: str = "cpu",
     config_loader: ConfigLoader | None = None,
     predictor_factory: _PredictorFactory | None = None,
 ) -> _Recognizer:
@@ -190,7 +221,7 @@ def _load_recognizer(
         )
 
     config["weights"] = str(weights_path)
-    config["device"] = "cpu"
+    config["device"] = device
     cnn_config["pretrained"] = False
     predictor_config["beamsearch"] = False
 
@@ -396,13 +427,19 @@ class LocalOCRAdapter(OCRProvider):
         self,
         model_root: str | Path | None = None,
         checkbox_detector: CheckboxPageDetector | None = None,
+        recognition_device: str | None = None,
     ) -> None:
         resolved_root = _require_model_root(model_root)
         paddle_dir, config_path, weights_path = _resolve_model_assets(
             resolved_root
         )
+        resolved_device = _resolve_recognition_device(recognition_device)
         self._detector = _load_detector(paddle_dir)
-        self._recognizer = _load_recognizer(config_path, weights_path)
+        self._recognizer = _load_recognizer(
+            config_path,
+            weights_path,
+            device=resolved_device,
+        )
         self._checkbox_detector = checkbox_detector or _load_checkbox_detector()
 
     def extract(

@@ -143,6 +143,40 @@ h1 {
   font-weight: 600;
 }
 
+.case-ready-message,
+.case-failed-message {
+  grid-column: 1 / -1;
+  margin: 0;
+  border-radius: 0.6rem;
+  padding: 0.75rem;
+}
+
+.case-ready-message {
+  color: #14633f;
+  background: #e7f7ef;
+}
+
+.case-ready-message p {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.case-ready-message a {
+  display: inline-block;
+  border-radius: 0.55rem;
+  padding: 0.55rem 0.8rem;
+  color: #fff;
+  background: #167247;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.case-failed-message {
+  color: #8f1b1b;
+  background: #fff0f0;
+  font-weight: 600;
+}
+
 .document-list {
   margin-top: 2rem;
 }

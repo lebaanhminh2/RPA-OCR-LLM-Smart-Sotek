@@ -58,6 +58,26 @@
   background: #fff0f0;
 }
 
+.review-page__waiting {
+  width: min(100%, 36rem);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  color: #174a98;
+  background: #edf4ff;
+  text-align: center;
+}
+
+.review-page__waiting p:last-child {
+  margin-bottom: 0;
+}
+
+.review-page__error a {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: #8f1b1b;
+  font-weight: 700;
+}
+
 .review-workspace {
   display: grid;
   grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr);

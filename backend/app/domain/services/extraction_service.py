@@ -38,6 +38,12 @@ class ExtractionService:
         if not self.is_case_ready_for_ocr(case_id):
             return
 
+        try:
+            self._process_ready_case(case_id)
+        except Exception:
+            self._mark_case_failed(case_id)
+
+    def _process_ready_case(self, case_id: str) -> None:
         any_failed = False
         documents = self._repository.list_documents_by_case_id(case_id)
         for document in documents:
@@ -63,10 +69,7 @@ class ExtractionService:
         ):
             return
 
-        try:
-            self._process_llm(case_id, documents)
-        except Exception:
-            self._mark_case_failed(case_id)
+        self._process_llm(case_id, documents)
 
     def _process_document(self, document: Document) -> bool:
         try:

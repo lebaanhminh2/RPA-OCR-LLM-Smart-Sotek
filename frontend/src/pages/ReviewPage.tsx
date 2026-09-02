@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   getCaseReview,
+  getCase,
   getDocumentFile,
   updateReviewField,
   uploadCase,
@@ -10,6 +11,7 @@ import { DocumentViewer } from '../components/DocumentViewer'
 import { FieldList } from '../components/FieldList'
 import type {
   CaseReview,
+  CaseStatus,
   DocumentFile,
   ReviewField,
   ReviewSource,
@@ -22,7 +24,10 @@ type ReviewPageProps = {
 }
 
 type LoadState = 'loading' | 'loaded' | 'error'
+type ReviewLoadState = 'loading' | 'waiting' | 'loaded' | 'failed' | 'error'
 type UploadState = 'idle' | 'uploading' | 'error'
+
+const CASE_POLL_INTERVAL_MS = 2_000
 
 type DocumentLoad = {
   documentId: string
@@ -47,7 +52,10 @@ function sourceLabel(source: ReviewSource, index: number): string {
 
 export function ReviewPage({ caseId }: ReviewPageProps) {
   const [review, setReview] = useState<CaseReview | null>(null)
-  const [reviewState, setReviewState] = useState<LoadState>('loading')
+  const [reviewState, setReviewState] =
+    useState<ReviewLoadState>('loading')
+  const [waitingStatus, setWaitingStatus] =
+    useState<CaseStatus>('PROCESSING')
   const [reviewError, setReviewError] = useState<string | null>(null)
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null)
@@ -65,12 +73,34 @@ export function ReviewPage({ caseId }: ReviewPageProps) {
 
   useEffect(() => {
     let isActive = true
+    let pollTimer: number | undefined
 
-    async function loadReview() {
-      setReviewState('loading')
-      setReviewError(null)
-
+    async function loadReviewWhenReady() {
       try {
+        const currentCase = await getCase(caseId)
+        if (!isActive) {
+          return
+        }
+        if (
+          currentCase.status === 'UPLOADING' ||
+          currentCase.status === 'PROCESSING'
+        ) {
+          setWaitingStatus(currentCase.status)
+          setReviewState('waiting')
+          setReviewError(null)
+          pollTimer = window.setTimeout(
+            () => void loadReviewWhenReady(),
+            CASE_POLL_INTERVAL_MS,
+          )
+          return
+        }
+        if (currentCase.status === 'FAILED') {
+          setWaitingStatus(currentCase.status)
+          setReviewState('failed')
+          setReviewError(null)
+          return
+        }
+
         const loadedReview = await getCaseReview(caseId)
         if (!isActive) {
           return
@@ -89,9 +119,12 @@ export function ReviewPage({ caseId }: ReviewPageProps) {
       }
     }
 
-    void loadReview()
+    void loadReviewWhenReady()
     return () => {
       isActive = false
+      if (pollTimer !== undefined) {
+        window.clearTimeout(pollTimer)
+      }
     }
   }, [caseId])
 
@@ -241,6 +274,37 @@ export function ReviewPage({ caseId }: ReviewPageProps) {
     return (
       <main className="review-page review-page--message">
         <p role="status">Đang tải dữ liệu hồ sơ...</p>
+      </main>
+    )
+  }
+
+  if (reviewState === 'waiting') {
+    return (
+      <main className="review-page review-page--message">
+        <section className="review-page__waiting" role="status">
+          <p className="eyebrow">Smart Sotek IDP · Processing</p>
+          <h1>Hồ sơ đang được xử lý</h1>
+          <p>
+            {waitingStatus === 'UPLOADING'
+              ? 'Hồ sơ chưa nhận đủ bốn giấy tờ bắt buộc.'
+              : 'OCR và Gemini đang trích xuất thông tin. Trang sẽ tự cập nhật khi hoàn tất.'}
+          </p>
+        </section>
+      </main>
+    )
+  }
+
+  if (reviewState === 'failed') {
+    return (
+      <main className="review-page review-page--message">
+        <section className="review-page__error" role="alert">
+          <h1>Xử lý hồ sơ không thành công</h1>
+          <p>
+            Pipeline OCR hoặc Gemini đã gặp lỗi. Hồ sơ được đánh dấu FAILED
+            thay vì tiếp tục chờ vô hạn.
+          </p>
+          <a href="/">Quay lại trang tạo hồ sơ</a>
+        </section>
       </main>
     )
   }

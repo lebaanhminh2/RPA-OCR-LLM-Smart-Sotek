@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from 'react'
+import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { createCase, getCase, uploadDocument } from '../api/client'
 import type { Case, Document, DocumentType } from '../types/api'
@@ -12,6 +12,8 @@ const DOCUMENT_ROWS: ReadonlyArray<{
   { label: 'Giấy đề nghị vay vốn', type: 'LOAN_APPLICATION' },
   { label: 'Hợp đồng lao động', type: 'LABOR_CONTRACT' },
 ]
+
+const CASE_POLL_INTERVAL_MS = 2_000
 
 type UploadPhase = 'idle' | 'uploading' | 'success' | 'error'
 
@@ -54,6 +56,55 @@ export function CaseUploadPage() {
   const [uploadStates, setUploadStates] = useState<UploadStates>(
     createInitialUploadStates,
   )
+
+  const currentCaseId = currentCase?.id ?? null
+  const currentCaseStatus = currentCase?.status ?? null
+
+  useEffect(() => {
+    if (currentCaseId === null || currentCaseStatus !== 'PROCESSING') {
+      return
+    }
+
+    const caseId = currentCaseId
+    let isActive = true
+    let pollTimer: number | undefined
+
+    async function pollCaseStatus() {
+      try {
+        const refreshedCase = await getCase(caseId)
+        if (!isActive) {
+          return
+        }
+        setCurrentCase(refreshedCase)
+        setPageError(null)
+        if (refreshedCase.status === 'PROCESSING') {
+          pollTimer = window.setTimeout(
+            () => void pollCaseStatus(),
+            CASE_POLL_INTERVAL_MS,
+          )
+        }
+      } catch (error: unknown) {
+        if (!isActive) {
+          return
+        }
+        setPageError(
+          `Chưa thể cập nhật tiến độ xử lý: ${getErrorText(error)}. Hệ thống sẽ thử lại.`,
+        )
+        pollTimer = window.setTimeout(
+          () => void pollCaseStatus(),
+          CASE_POLL_INTERVAL_MS,
+        )
+      }
+    }
+
+    void pollCaseStatus()
+    return () => {
+      isActive = false
+      if (pollTimer !== undefined) {
+        window.clearTimeout(pollTimer)
+      }
+    }
+  }, [currentCaseId, currentCaseStatus])
 
   async function handleCreateCase() {
     setIsCreatingCase(true)
@@ -184,7 +235,22 @@ export function CaseUploadPage() {
             </div>
             {currentCase.status === 'PROCESSING' ? (
               <p className="processing-message">
-                Hồ sơ đã đủ giấy tờ và đang chờ xử lý.
+                Hồ sơ đang được OCR và trích xuất thông tin. Trang này sẽ tự
+                cập nhật khi hoàn tất.
+              </p>
+            ) : null}
+            {currentCase.status === 'READY_FOR_REVIEW' ? (
+              <div className="case-ready-message">
+                <p>Đã xử lý xong. Hồ sơ sẵn sàng để kiểm tra.</p>
+                <a href={`/?case_id=${encodeURIComponent(currentCase.id)}`}>
+                  Mở màn hình Review
+                </a>
+              </div>
+            ) : null}
+            {currentCase.status === 'FAILED' ? (
+              <p className="case-failed-message" role="alert">
+                Không thể xử lý hồ sơ. Vui lòng kiểm tra cấu hình OCR/Gemini
+                hoặc tạo hồ sơ mới để thử lại.
               </p>
             ) : null}
           </section>

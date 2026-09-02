@@ -389,3 +389,26 @@ def test_llm_failure_marks_case_failed_without_persisting_fields() -> None:
     assert repository.extracted_fields == []
     assert repository.field_sources == []
     assert repository.cases[case.id].status is CaseStatus.FAILED
+
+
+def test_secondary_ocr_status_error_cannot_leave_case_processing() -> None:
+    class FailingDocumentStatusRepository(FakeRepository):
+        def update_document_ocr_status(
+            self,
+            document_id: str,
+            status: DocumentOcrStatus,
+        ) -> Document | None:
+            raise RuntimeError("synthetic document status failure")
+
+    case = make_case()
+    document = make_document("front", DocumentType.CCCD_FRONT)
+    repository = FailingDocumentStatusRepository(case, [document])
+    service = ExtractionService(
+        repository,
+        FakeOCRProvider({document.id}),
+        FakeLLMProvider(),
+    )
+
+    service.process_case_ocr(case.id)
+
+    assert repository.cases[case.id].status is CaseStatus.FAILED

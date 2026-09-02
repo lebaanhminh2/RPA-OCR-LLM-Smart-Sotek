@@ -9,9 +9,11 @@ from pydantic import BaseModel
 
 from app.api.cases import create_cases_router
 from app.api.documents import create_documents_router
+from app.api.review import create_review_router
 from app.domain.services.case_service import CaseService
 from app.domain.services.document_service import DocumentService
 from app.domain.services.extraction_service import ExtractionService
+from app.domain.services.review_service import ReviewService
 from app.infra.db.database import (
     SessionFactory,
     engine,
@@ -52,6 +54,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 repository = SQLiteRepository(SessionFactory)
 case_service = CaseService(repository)
 document_service = DocumentService(repository)
+review_service = ReviewService(repository)
 upload_root = Path(__file__).resolve().parents[1] / "uploads"
 
 
@@ -80,6 +83,7 @@ app.include_router(
         upload_root,
     )
 )
+app.include_router(create_review_router(review_service))
 
 
 @app.get("/health", response_model=HealthResponse)

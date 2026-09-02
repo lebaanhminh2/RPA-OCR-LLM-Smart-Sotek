@@ -7,3 +7,4 @@ mypy
 SQLAlchemy>=2,<3
 python-multipart
 pypdf
+google-genai==2.21.0

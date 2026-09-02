@@ -1,0 +1,43 @@
+.field-item {
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  padding: 0.75rem;
+  color: #172033;
+  background: transparent;
+  text-align: left;
+}
+
+.field-item:hover {
+  background: #f3f7fd;
+}
+
+.field-item--selected {
+  border-color: #9bbcf2;
+  background: #eaf2ff;
+  box-shadow: inset 3px 0 #1859c9;
+}
+
+.field-item__label {
+  color: #536174;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.field-item__value {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.field-item__value--empty {
+  color: #7a8799;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.field-item__evidence {
+  color: #718096;
+  font-size: 0.72rem;
+}

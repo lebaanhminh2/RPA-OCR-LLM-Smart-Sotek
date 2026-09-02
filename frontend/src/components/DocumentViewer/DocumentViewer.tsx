@@ -20,13 +20,14 @@ GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 type SharedDocumentViewerProps = {
   source: string | Blob
-  highlight?: NormalizedBbox
+  highlights?: readonly NormalizedBbox[]
 }
 
 export type DocumentViewerProps =
   | (SharedDocumentViewerProps & {
       documentType: 'pdf'
       label?: string
+      pageNumber?: number
     })
   | (SharedDocumentViewerProps & {
       documentType: 'image'
@@ -39,7 +40,7 @@ type ZoomLevel = 1 | 1.5
 const blobSourceIds = new WeakMap<Blob, number>()
 let nextBlobSourceId = 1
 
-function getImageSourceKey(source: string | Blob): string {
+function getDocumentSourceKey(source: string | Blob): string {
   if (typeof source === 'string') {
     return source
   }
@@ -96,29 +97,32 @@ function useDisplayedDimensions(
   return dimensions
 }
 
-function HighlightOverlay({
-  highlight,
+function HighlightOverlays({
+  highlights,
   dimensions,
 }: {
-  highlight: NormalizedBbox | undefined
+  highlights: readonly NormalizedBbox[]
   dimensions: DisplayedPageDimensions
 }) {
   if (
-    highlight === undefined ||
+    highlights.length === 0 ||
     dimensions.width === 0 ||
     dimensions.height === 0
   ) {
     return null
   }
 
-  const rectangle = normalizedBboxToPixelRectangle(highlight, dimensions)
-
   return (
-    <div
-      className="document-viewer__highlight"
-      style={rectangle}
-      aria-hidden="true"
-    />
+    <>
+      {highlights.map((highlight, index) => (
+        <div
+          className="document-viewer__highlight"
+          style={normalizedBboxToPixelRectangle(highlight, dimensions)}
+          aria-hidden="true"
+          key={`${highlight.bbox_x}-${highlight.bbox_y}-${index}`}
+        />
+      ))}
+    </>
   )
 }
 
@@ -154,7 +158,8 @@ function ZoomControls({
 
 function PdfViewer({
   source,
-  highlight,
+  highlights = [],
+  pageNumber,
   zoom,
   onZoomChange,
   label = 'Tài liệu PDF',
@@ -165,7 +170,7 @@ function PdfViewer({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const displayedDimensions = useDisplayedDimensions(canvasRef)
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null)
-  const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(pageNumber ?? 1)
   const [totalPages, setTotalPages] = useState(0)
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [isRendering, setIsRendering] = useState(false)
@@ -179,7 +184,7 @@ function PdfViewer({
       setLoadState('loading')
       setErrorMessage(null)
       setPdfDocument(null)
-      setCurrentPage(1)
+      setCurrentPage(pageNumber ?? 1)
       setTotalPages(0)
 
       try {
@@ -219,7 +224,7 @@ function PdfViewer({
         void loadingTask.destroy().catch(() => undefined)
       }
     }
-  }, [source])
+  }, [pageNumber, source])
 
   useEffect(() => {
     if (pdfDocument === null || totalPages === 0) {
@@ -295,9 +300,10 @@ function PdfViewer({
             className="document-viewer__canvas"
             hidden={!showDocument}
           />
-          {showDocument ? (
-            <HighlightOverlay
-              highlight={highlight}
+          {showDocument &&
+          (pageNumber === undefined || currentPage === pageNumber) ? (
+            <HighlightOverlays
+              highlights={highlights}
               dimensions={displayedDimensions}
             />
           ) : null}
@@ -339,7 +345,7 @@ function PdfViewer({
 function ImageViewer({
   source,
   alt,
-  highlight,
+  highlights = [],
   zoom,
   onZoomChange,
 }: Extract<DocumentViewerProps, { documentType: 'image' }> & {
@@ -392,8 +398,8 @@ function ImageViewer({
             onError={() => setLoadState('error')}
           />
           {loadState === 'loaded' ? (
-            <HighlightOverlay
-              highlight={highlight}
+            <HighlightOverlays
+              highlights={highlights}
               dimensions={displayedDimensions}
             />
           ) : null}
@@ -413,10 +419,15 @@ export function DocumentViewer(props: DocumentViewerProps) {
   const [zoom, setZoom] = useState<ZoomLevel>(1)
 
   return props.documentType === 'pdf' ? (
-    <PdfViewer {...props} zoom={zoom} onZoomChange={setZoom} />
+    <PdfViewer
+      key={`${getDocumentSourceKey(props.source)}-${props.pageNumber ?? 1}`}
+      {...props}
+      zoom={zoom}
+      onZoomChange={setZoom}
+    />
   ) : (
     <ImageViewer
-      key={getImageSourceKey(props.source)}
+      key={getDocumentSourceKey(props.source)}
       {...props}
       zoom={zoom}
       onZoomChange={setZoom}

@@ -1,0 +1,146 @@
+.review-page {
+  min-height: 100vh;
+  padding: 1.25rem;
+}
+
+.review-page--message {
+  display: grid;
+  place-items: center;
+}
+
+.review-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: min(100%, 1500px);
+  margin: 0 auto 1rem;
+}
+
+.review-page__header h1 {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+}
+
+.review-page__case-id {
+  margin: 0.25rem 0 0;
+  color: #65738a;
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.review-page__error {
+  width: min(100%, 36rem);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  color: #8f1b1b;
+  background: #fff0f0;
+}
+
+.review-workspace {
+  display: grid;
+  grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr);
+  width: min(100%, 1500px);
+  height: calc(100vh - 8.5rem);
+  min-height: 34rem;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #dfe5ee;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 1rem 3rem rgb(32 55 90 / 8%);
+}
+
+.review-evidence {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  padding: 1.25rem;
+}
+
+.review-evidence__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.review-evidence__header h2 {
+  margin-bottom: 0;
+  font-size: 1.15rem;
+}
+
+.review-evidence__header > span {
+  color: #536174;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.source-selector {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-bottom: 0.75rem;
+  overflow-x: auto;
+}
+
+.source-selector__button {
+  flex: 0 0 auto;
+  border: 1px solid #cbd7e8;
+  padding: 0.45rem 0.7rem;
+  color: #536174;
+  background: #fff;
+  font-size: 0.78rem;
+}
+
+.source-selector__button--active {
+  border-color: #1859c9;
+  color: #174a98;
+  background: #eaf2ff;
+}
+
+.review-evidence__viewer {
+  min-width: 0;
+  min-height: 0;
+  margin-top: 1rem;
+  overflow: auto;
+}
+
+.review-evidence__empty,
+.review-evidence__error {
+  display: grid;
+  min-height: 18rem;
+  place-items: center;
+  margin: 0;
+  border-radius: 0.75rem;
+  padding: 2rem;
+  color: #65738a;
+  background: #f6f8fb;
+  text-align: center;
+}
+
+.review-evidence__error {
+  color: #8f1b1b;
+  background: #fff0f0;
+}
+
+@media (max-width: 880px) {
+  .review-page {
+    padding: 0.75rem;
+  }
+
+  .review-page__header {
+    align-items: flex-start;
+  }
+
+  .review-workspace {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .review-evidence {
+    min-height: 35rem;
+  }
+}

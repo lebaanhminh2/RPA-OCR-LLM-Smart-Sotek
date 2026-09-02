@@ -1,4 +1,10 @@
-import type { Case, Document, DocumentType } from '../types/api'
+import type {
+  Case,
+  CaseReview,
+  Document,
+  DocumentFile,
+  DocumentType,
+} from '../types/api'
 
 const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000'
 const API_BASE_URL = (
@@ -6,7 +12,7 @@ const API_BASE_URL = (
 ).replace(/\/$/, '')
 
 type ApiError = {
-  detail: string
+  detail: string | { message?: string }
 }
 
 function isApiError(value: unknown): value is ApiError {
@@ -14,7 +20,8 @@ function isApiError(value: unknown): value is ApiError {
     typeof value === 'object' &&
     value !== null &&
     'detail' in value &&
-    typeof value.detail === 'string'
+    (typeof value.detail === 'string' ||
+      (typeof value.detail === 'object' && value.detail !== null))
   )
 }
 
@@ -23,7 +30,15 @@ async function getErrorMessage(response: Response): Promise<string> {
 
   try {
     const body: unknown = await response.json()
-    return isApiError(body) ? body.detail : fallbackMessage
+    if (!isApiError(body)) {
+      return fallbackMessage
+    }
+    if (typeof body.detail === 'string') {
+      return body.detail
+    }
+    return typeof body.detail.message === 'string'
+      ? body.detail.message
+      : fallbackMessage
   } catch {
     return fallbackMessage
   }
@@ -68,4 +83,37 @@ export async function uploadDocument(
     },
   )
   return parseResponse<Document>(response)
+}
+
+export async function getCaseReview(caseId: string): Promise<CaseReview> {
+  const response = await fetch(
+    `${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/review`,
+  )
+  return parseResponse<CaseReview>(response)
+}
+
+export async function getDocumentFile(
+  documentId: string,
+): Promise<DocumentFile> {
+  const response = await fetch(
+    `${API_BASE_URL}/documents/${encodeURIComponent(documentId)}/file`,
+  )
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  const blob = await response.blob()
+  const mediaType = (response.headers.get('content-type') || blob.type)
+    .split(';', 1)[0]
+    .trim()
+    .toLowerCase()
+  if (mediaType === 'application/pdf') {
+    return { blob, documentType: 'pdf' }
+  }
+  if (mediaType.startsWith('image/')) {
+    return { blob, documentType: 'image' }
+  }
+  throw new Error(
+    `Định dạng tài liệu không được hỗ trợ: ${mediaType || 'không xác định'}.`,
+  )
 }

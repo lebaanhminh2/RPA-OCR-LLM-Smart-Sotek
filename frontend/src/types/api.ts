@@ -29,3 +29,33 @@ export type Document = {
   ocr_status: DocumentOcrStatus
   uploaded_at: string
 }
+
+export type ReviewSource = {
+  ocr_block_id: string
+  document_id: string
+  page_number: number
+  bbox_x: number
+  bbox_y: number
+  bbox_width: number
+  bbox_height: number
+}
+
+export type ReviewField = {
+  id: string
+  case_id: string
+  field_code: string
+  original_value: string | null
+  current_value: string | null
+  sources: ReviewSource[]
+}
+
+export type CaseReview = {
+  case_id: string
+  status: Extract<CaseStatus, 'READY_FOR_REVIEW' | 'COMPLETED'>
+  fields: ReviewField[]
+}
+
+export type DocumentFile = {
+  blob: Blob
+  documentType: 'pdf' | 'image'
+}

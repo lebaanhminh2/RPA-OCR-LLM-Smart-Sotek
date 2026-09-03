@@ -46,6 +46,17 @@ provider cụ thể chỉ được khởi tạo trong `infra/` và nối với d
 Hướng dẫn cài OCR trên Windows, cấu trúc model weights và cấu hình CPU/GPU nằm
 tại [backend/README.md](backend/README.md).
 
+Nếu cài từ một máy mới, model weights đã kiểm chứng được lưu bằng Git LFS trên
+nhánh `model-assets`. Khôi phục chúng bằng:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\restore_model_assets.ps1
+```
+
+Checklist đầy đủ từ máy trắng nằm tại
+[docs/RESTORE_PROJECT.md](docs/RESTORE_PROJECT.md).
+
 Các biến môi trường runtime:
 
 ```text
@@ -80,8 +91,19 @@ Frontend production hiện được phát hành tại:
 
 https://smart-sotek-ocr-frontend.vercel.app
 
-Deployment này chỉ phục vụ giao diện cho tới khi có backend công khai phù hợp
-với workload OCR local/GPU.
+Deployment này là portfolio demo tĩnh: mô phỏng Upload và processing, sau đó
+mở Review với 40 field, 44 nguồn bằng chứng và bốn PDF mẫu. Người xem có thể
+click field để mở đúng trang/bbox và sửa dữ liệu trong bộ nhớ; refresh sẽ khôi
+phục dữ liệu ban đầu. Demo không cần backend và không lưu dữ liệu.
+
+Để chạy cùng demo mode sau khi clone:
+
+```powershell
+cd frontend
+npm ci
+$env:VITE_DEMO_MODE="true"
+npm run dev
+```
 
 ## Kiểm tra chất lượng
 

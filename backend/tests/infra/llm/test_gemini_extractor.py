@@ -87,6 +87,39 @@ def _documents() -> list[LLMDocumentInput]:
     ]
 
 
+def _address_document() -> LLMDocumentInput:
+    address_parts = [
+        (
+            "source-street",
+            "Số 6, ngõ 5 Vạn Phúc",
+            0.08,
+            0.26,
+        ),
+        ("source-ward", "Kim Mã", 0.08, 0.31),
+        ("source-district", "Ba dinh", 0.38, 0.31),
+        ("source-city", "Hà Nội", 0.68, 0.31),
+    ]
+    return LLMDocumentInput(
+        document_id="document-loan-address",
+        document_type=DocumentType.LOAN_APPLICATION,
+        blocks=[
+            OCRBlock(
+                id=source_id,
+                document_id="document-loan-address",
+                page_number=2,
+                text=text,
+                bbox_x=bbox_x,
+                bbox_y=bbox_y,
+                bbox_width=0.2,
+                bbox_height=0.03,
+                confidence=0.9,
+                created_at=datetime(2026, 9, 3, tzinfo=UTC),
+            )
+            for source_id, text, bbox_x, bbox_y in address_parts
+        ],
+    )
+
+
 def _response_json(
     values: dict[str, tuple[str, list[str]]] | None = None,
 ) -> str:
@@ -163,6 +196,55 @@ def test_extract_uses_document_aware_prompt_and_structured_output() -> None:
     assert "muc_luong_gross" in cast(str, config.system_instruction)
     assert "đúng một @" in cast(str, config.system_instruction)
     assert "nhiều cách hiểu" in cast(str, config.system_instruction)
+
+
+def test_prompt_requires_complete_address_and_generic_diacritic_repair() -> None:
+    source_ids = [
+        "source-street",
+        "source-ward",
+        "source-district",
+        "source-city",
+    ]
+    generate_content = FakeGenerateContent(
+        [
+            _response_json(
+                {
+                    "dia_chi_thuong_tru": (
+                        "Số 6, ngõ 5 Vạn Phúc, Kim Mã, Ba Đình, Hà Nội",
+                        source_ids,
+                    )
+                }
+            )
+        ]
+    )
+    extractor = GeminiExtractor(generate_content=generate_content)
+
+    result = extractor.extract([_address_document()])
+
+    address = next(
+        field
+        for field in result
+        if field.field_code == "dia_chi_thuong_tru"
+    )
+    assert address.source_ids == source_ids
+
+    call = generate_content.calls[0]
+    prompt = json.loads(cast(str, call["contents"]))
+    blocks = prompt["documents"][0]["blocks"]
+    assert [block["source_id"] for block in blocks] == source_ids
+    assert [block["text"] for block in blocks] == [
+        "Số 6, ngõ 5 Vạn Phúc",
+        "Kim Mã",
+        "Ba dinh",
+        "Hà Nội",
+    ]
+
+    config = cast(types.GenerateContentConfig, call["config"])
+    instruction = cast(str, config.system_instruction)
+    assert "mọi field text" in instruction
+    assert "không hardcode tên người hoặc địa danh cụ thể" in instruction
+    assert "ghép đủ mọi ô có nội dung" in instruction
+    assert "source_ids phải chứa mọi OCR block" in instruction
 
 
 def test_extractor_retains_sdk_client_for_its_lifetime(

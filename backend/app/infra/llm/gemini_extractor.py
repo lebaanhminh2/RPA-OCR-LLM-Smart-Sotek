@@ -40,7 +40,18 @@ Quy tắc bắt buộc:
   hoặc ký tự bị đọc nhầm thành @. Kết quả phải có đúng một @, không có khoảng
   trắng và domain phải chứa dấu chấm. Không tự thay đổi nhiều ký tự của tên
   người dùng/domain; nếu có nhiều cách hiểu hợp lý thì trả null.
-- Không chuẩn hoá các field khác hoặc suy diễn ngoài nội dung tài liệu.
+- Với mọi field text: được phục hồi dấu tiếng Việt và chữ hoa/thường khi OCR
+  block, nhãn biểu mẫu và ngữ cảnh xung quanh chỉ cho đúng một cách hiểu hợp
+  lý. Đây là quy tắc chung; không hardcode tên người hoặc địa danh cụ thể,
+  không thay từ và không thêm thông tin ngoài evidence. Nếu có nhiều cách hiểu
+  hợp lý thì giữ nguyên chuỗi OCR thô để chuyên viên review.
+- Với mọi field địa chỉ: nếu biểu mẫu tách địa chỉ thành các ô có nhãn, phải
+  ghép đủ mọi ô có nội dung theo thứ tự trên biểu mẫu: số nhà/đường, phường/xã,
+  quận/huyện, tỉnh/thành phố. Không bỏ thành phần đã có OCR evidence và
+  source_ids phải chứa mọi OCR block đóng góp vào giá trị; không dùng riêng
+  block nhãn làm evidence và không suy diễn ô còn trống.
+- Ngoài các quy tắc thận trọng trên, không chuẩn hoá field hoặc suy diễn ngoài
+  nội dung tài liệu.
 """.strip()
 
 _SOURCE_GROUNDING_INSTRUCTION = """

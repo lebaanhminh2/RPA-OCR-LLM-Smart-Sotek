@@ -3,7 +3,7 @@
 > Source of truth cho danh mục trường M4. Tài liệu này chỉ mô tả dữ liệu trích
 > xuất từ 4 loại tài liệu MVP; không mô tả BPM mapping, suy diễn hay đối chiếu
 > chéo tài liệu. Ngoại lệ được duyệt gồm định dạng canonical cho bốn trường
-> tiền và sửa lỗi OCR email ở mức thận trọng.
+> tiền, sửa lỗi OCR email và phục hồi dấu tiếng Việt ở mức thận trọng.
 
 ## 1. Phạm vi
 
@@ -49,6 +49,18 @@
   không được tự thay đổi nhiều ký tự của tên người dùng/domain. Trường hợp mơ
   hồ trả `null` để chuyên viên nhập lại. Review UI cảnh báo nhưng không khóa
   thao tác sửa khi giá trị email hiện tại chưa đúng cấu trúc.
+- Với mọi field text, Gemini được phục hồi dấu tiếng Việt và chữ hoa/thường
+  khi OCR block, nhãn biểu mẫu và ngữ cảnh xung quanh chỉ cho đúng một cách
+  hiểu hợp lý. Đây là quy tắc chung, không hardcode tên người hoặc địa danh cụ
+  thể. Không được thay từ, thêm thông tin không có trong evidence hoặc tự chọn
+  giữa nhiều cách hiểu; trường hợp mơ hồ phải giữ nguyên chuỗi OCR thô để
+  chuyên viên review.
+- Với field địa chỉ, nếu biểu mẫu tách địa chỉ thành nhiều ô có nhãn thì giá
+  trị phải ghép đủ mọi ô có nội dung theo thứ tự trên biểu mẫu, ví dụ số
+  nhà/đường → phường/xã → quận/huyện → tỉnh/thành phố. Không được bỏ một thành
+  phần đã có OCR evidence; `source_ids` phải chứa mọi OCR block đã đóng góp vào
+  giá trị. Quy tắc này chỉ ghép các thành phần có sẵn, không tách địa chỉ thành
+  field mới và không suy diễn thành phần còn thiếu.
 
 ## 3. Core 40 field catalog
 
@@ -67,8 +79,8 @@
 | `tinh_trang_hon_nhan` | Tình trạng hôn nhân | `string \| null` | `LOAN_APPLICATION` | Single-choice checkbox |
 | `trinh_do_hoc_van` | Trình độ học vấn | `string \| null` | `LOAN_APPLICATION` | Single-choice checkbox |
 | `hinh_thuc_so_huu_nha` | Hình thức sở hữu nhà đang ở | `string \| null` | `LOAN_APPLICATION` | Single-choice checkbox |
-| `dia_chi_thuong_tru` | Địa chỉ thường trú | `string \| null` | `CCCD_FRONT`, `LOAN_APPLICATION`, `LABOR_CONTRACT` | Text; giữ nguyên chuỗi thô |
-| `dia_chi_hien_tai` | Địa chỉ nơi ở hiện tại | `string \| null` | `LOAN_APPLICATION` | Text; giữ nguyên chuỗi thô |
+| `dia_chi_thuong_tru` | Địa chỉ thường trú | `string \| null` | `CCCD_FRONT`, `LOAN_APPLICATION`, `LABOR_CONTRACT` | Text; ghép đủ các ô địa chỉ có evidence theo §2 |
+| `dia_chi_hien_tai` | Địa chỉ nơi ở hiện tại | `string \| null` | `LOAN_APPLICATION` | Text; ghép đủ các ô địa chỉ có evidence theo §2 |
 | `thoi_gian_cu_tru_hien_tai` | Thời gian cư trú tại địa chỉ hiện tại | `string \| null` | `LOAN_APPLICATION` | Text; không tự tính |
 
 ### 3.2 Khoản vay và giải ngân (12)

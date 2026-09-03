@@ -4,6 +4,7 @@ import {
   getCaseReview,
   getCase,
   getDocumentFile,
+  isDemoCaseId,
   updateReviewField,
   uploadCase,
 } from '../api/client'
@@ -51,6 +52,7 @@ function sourceLabel(source: ReviewSource, index: number): string {
 }
 
 export function ReviewPage({ caseId }: ReviewPageProps) {
+  const isDemoMode = isDemoCaseId(caseId)
   const [review, setReview] = useState<CaseReview | null>(null)
   const [reviewState, setReviewState] =
     useState<ReviewLoadState>('loading')
@@ -328,6 +330,12 @@ export function ReviewPage({ caseId }: ReviewPageProps) {
           <p className="eyebrow">Smart Sotek IDP · Review</p>
           <h1>Kiểm tra thông tin hồ sơ</h1>
           <p className="review-page__case-id">Mã hồ sơ: {review.case_id}</p>
+          {isDemoMode ? (
+            <p className="review-page__demo-notice" role="status">
+              Demo công khai · Có thể sửa dữ liệu và kiểm tra bằng chứng. Mọi
+              thay đổi sẽ được đặt lại khi tải lại trang.
+            </p>
+          ) : null}
         </div>
         <div className="review-page__actions">
           <span className="status-badge">{review.status}</span>
@@ -335,13 +343,16 @@ export function ReviewPage({ caseId }: ReviewPageProps) {
             type="button"
             onClick={() => void handleUploadCase()}
             disabled={
+              isDemoMode ||
               review.status === 'COMPLETED' ||
               uploadState === 'uploading' ||
               pendingFieldIds.size > 0 ||
               fieldSaveErrors.size > 0
             }
           >
-            {review.status === 'COMPLETED'
+            {isDemoMode
+              ? 'Demo không lưu'
+              : review.status === 'COMPLETED'
               ? 'Đã Upload'
               : uploadState === 'uploading'
                 ? 'Đang Upload...'

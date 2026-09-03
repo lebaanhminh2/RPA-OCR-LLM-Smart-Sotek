@@ -28,6 +28,18 @@
   overflow-wrap: anywhere;
 }
 
+.review-page__demo-notice {
+  max-width: 46rem;
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #9cc5e8;
+  border-radius: 0.65rem;
+  background: #eaf4fc;
+  color: #164b73;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .review-page__actions {
   display: grid;
   justify-items: end;

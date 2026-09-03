@@ -1,0 +1,774 @@
+{
+  "case": {
+    "id": "demo-latest",
+    "status": "READY_FOR_REVIEW",
+    "created_at": "2026-09-03 09:09:15.845924",
+    "updated_at": "2026-09-03 09:14:02.711585"
+  },
+  "review": {
+    "case_id": "demo-latest",
+    "status": "READY_FOR_REVIEW",
+    "fields": [
+      {
+        "id": "99cdf84a-b7d7-4152-aefb-3caf8528ffe1",
+        "case_id": "demo-latest",
+        "field_code": "chi_nhanh_nhan_giai_ngan",
+        "original_value": "Ba đinh",
+        "current_value": "Ba đình",
+        "sources": [
+          {
+            "ocr_block_id": "6ef74c27-1abe-4ca2-8bef-227d7dfc53aa",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.3808549340609368,
+            "bbox_y": 0.5812619502868069,
+            "bbox_width": 0.10732150977717145,
+            "bbox_height": 0.02804333970681963
+          }
+        ]
+      },
+      {
+        "id": "cb31382a-5fe7-46c6-8c85-98809f58c04b",
+        "case_id": "demo-latest",
+        "field_code": "chi_phi_sinh_hoat_hang_thang",
+        "original_value": "15.000.000",
+        "current_value": "15.000.000",
+        "sources": [
+          {
+            "ocr_block_id": "beb8a8c1-5312-4bc7-ab13-34b21c7c4b41",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 3,
+            "bbox_x": 0.53706230104593,
+            "bbox_y": 0.26133461047254153,
+            "bbox_width": 0.1550704865848113,
+            "bbox_height": 0.01995530012771392
+          }
+        ]
+      },
+      {
+        "id": "0ca376c3-50a7-4408-9f52-a73e6854b2c1",
+        "case_id": "demo-latest",
+        "field_code": "chi_tiet_muc_dich_vay_khac",
+        "original_value": null,
+        "current_value": null,
+        "sources": []
+      },
+      {
+        "id": "91ff7b44-f1a1-49d0-b79c-4c41e54fb4fb",
+        "case_id": "demo-latest",
+        "field_code": "chuc_vu",
+        "original_value": "Chuyên viên",
+        "current_value": "Chuyên viên",
+        "sources": [
+          {
+            "ocr_block_id": "6222a93f-e815-4e91-83a0-c2ddc2f9525c",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.28304227973830437,
+            "bbox_y": 0.8355033587212343,
+            "bbox_width": 0.1347791976200119,
+            "bbox_height": 0.017067606287214376
+          }
+        ]
+      },
+      {
+        "id": "67206518-623c-4324-9a71-cca676b5ce29",
+        "case_id": "demo-latest",
+        "field_code": "co_quan_cap_cccd",
+        "original_value": "Cục CSQLHC VỀ TTXH",
+        "current_value": "Cục CSQLHC VỀ TTXH",
+        "sources": [
+          {
+            "ocr_block_id": "46aa84c1-b1bc-4d93-b392-5d4392f8b92c",
+            "document_id": "9a22e59e-e97e-4be9-a3cc-2a11880bab93",
+            "page_number": 1,
+            "bbox_x": 0.30772855796418475,
+            "bbox_y": 0.570670205706702,
+            "bbox_width": 0.24599434495758718,
+            "bbox_height": 0.01907763769077638
+          }
+        ]
+      },
+      {
+        "id": "55af4911-eb99-422c-a60b-f9a9cd63b970",
+        "case_id": "demo-latest",
+        "field_code": "dia_chi_cong_ty",
+        "original_value": "200, Đường - Bên Nghé.Q1, TP.Hồ Chi Minh",
+        "current_value": "200, Đường - Bên Nghé.Q1, TP.Hồ Chi Minh",
+        "sources": [
+          {
+            "ocr_block_id": "59edaa13-c6ab-41b9-8dca-49ed23822169",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.09663483401546158,
+            "bbox_y": 0.6469262954618603,
+            "bbox_width": 0.7471577989995453,
+            "bbox_height": 0.030254264563887995
+          }
+        ]
+      },
+      {
+        "id": "7fced855-a379-4ded-aa0f-a72a61383050",
+        "case_id": "demo-latest",
+        "field_code": "dia_chi_hien_tai",
+        "original_value": "Số 6 ngõ 5 Vạn Phúc, Kim Mã, Bạ Đình, Hà Nội",
+        "current_value": "Số 6 ngõ 5 Vạn Phúc, Kim Mã, Bạ Đình, Hà Nội",
+        "sources": [
+          {
+            "ocr_block_id": "5534f498-d83e-4235-ac7d-c457fd21b959",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.09367894497498863,
+            "bbox_y": 0.37077566784679755,
+            "bbox_width": 0.3171896316507503,
+            "bbox_height": 0.02832314129385259
+          },
+          {
+            "ocr_block_id": "be5d9323-ad0f-4100-9c2c-a9264ebcdc32",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.09822646657571624,
+            "bbox_y": 0.42291599613775344,
+            "bbox_width": 0.12210095497953616,
+            "bbox_height": 0.02188606372706791
+          },
+          {
+            "ocr_block_id": "cbd8831f-bf9c-48a0-8c60-e999c2d38f2f",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.6637107776261937,
+            "bbox_y": 0.4219504345027358,
+            "bbox_width": 0.1145975443383356,
+            "bbox_height": 0.025909237206308337
+          },
+          {
+            "ocr_block_id": "ccd654ab-6306-4f52-b293-d23e6513231f",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.37789904502046384,
+            "bbox_y": 0.42388155777277114,
+            "bbox_width": 0.10413824465666212,
+            "bbox_height": 0.02301255230125523
+          }
+        ]
+      },
+      {
+        "id": "0e3020ee-1c2f-4ee7-b96f-b4105106ba0b",
+        "case_id": "demo-latest",
+        "field_code": "dia_chi_thuong_tru",
+        "original_value": "Sở 6, NĐỗ 5 Vạn Phúc, Kim Mã, Bạ Đình, Hạ Nội",
+        "current_value": "Sở 6,  5 Vạn Phúc, Kim Mã, Bạ Đình, Hạ Nội",
+        "sources": [
+          {
+            "ocr_block_id": "44f95a43-4c3e-4b55-89cf-ae2be6d180f3",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.08890404729422464,
+            "bbox_y": 0.30077244930801417,
+            "bbox_width": 0.12710322874033653,
+            "bbox_height": 0.026552944962986803
+          },
+          {
+            "ocr_block_id": "9f5921ff-04f7-4629-8f7c-1cd6f1bda084",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.6771259663483401,
+            "bbox_y": 0.3010943031863534,
+            "bbox_width": 0.09822646657571624,
+            "bbox_height": 0.023978113936272933
+          },
+          {
+            "ocr_block_id": "f712083b-a9be-44a8-9870-11d6e897d35f",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.3824465666211915,
+            "bbox_y": 0.3010943031863534,
+            "bbox_width": 0.10572987721691678,
+            "bbox_height": 0.023978113936272933
+          },
+          {
+            "ocr_block_id": "febf2ed9-0cf0-4960-8bc7-1bddde589f7e",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.09231468849477036,
+            "bbox_y": 0.2520115867396202,
+            "bbox_width": 0.29172351068667574,
+            "bbox_height": 0.02510460251046025
+          }
+        ]
+      },
+      {
+        "id": "e573a2d2-7632-40db-9a2f-81dc688fcdc8",
+        "case_id": "demo-latest",
+        "field_code": "dien_thoai_cong_ty",
+        "original_value": "028 000 0000",
+        "current_value": "028 000 0000",
+        "sources": [
+          {
+            "ocr_block_id": "58c52142-4283-4d49-b043-4e4367674c36",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.09799909049567986,
+            "bbox_y": 0.6968136466044416,
+            "bbox_width": 0.27262391996361984,
+            "bbox_height": 0.02413904087544255
+          }
+        ]
+      },
+      {
+        "id": "43824692-46f7-4178-9e80-30878402a1db",
+        "case_id": "demo-latest",
+        "field_code": "email",
+        "original_value": "Tranxuanha@zmail.com",
+        "current_value": "Tranxuanha@zmail.com",
+        "sources": [
+          {
+            "ocr_block_id": "5803c1d4-da7a-421f-a32d-e128ef26bfbc",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.5220554797635288,
+            "bbox_y": 0.9102931803696622,
+            "bbox_width": 0.2728512960436562,
+            "bbox_height": 0.02517527087316762
+          }
+        ]
+      },
+      {
+        "id": "39f6ad23-d258-4793-9879-3e1bd753db31",
+        "case_id": "demo-latest",
+        "field_code": "gioi_tinh",
+        "original_value": "Nam",
+        "current_value": "Nam",
+        "sources": [
+          {
+            "ocr_block_id": "45cd8402-293a-428e-a81a-b63fd9eed5e7",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.15622977984932782,
+            "bbox_y": 0.7630125085892686,
+            "bbox_width": 0.0779208694603726,
+            "bbox_height": 0.01671429665093216
+          }
+        ]
+      },
+      {
+        "id": "c7876717-cffd-4dfb-bb2f-1657a958c504",
+        "case_id": "demo-latest",
+        "field_code": "hinh_thuc_nhan_luong",
+        "original_value": "Chuyển khoản",
+        "current_value": "Chuyển khoản",
+        "sources": [
+          {
+            "ocr_block_id": "029265ee-f1fd-4244-97f1-d23f68e1c71f",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 3,
+            "bbox_x": 0.25889256413604195,
+            "bbox_y": 0.2913017419106202,
+            "bbox_width": 0.14519705778905184,
+            "bbox_height": 0.017106778472471662
+          }
+        ]
+      },
+      {
+        "id": "1d88c9b3-42f6-43c5-ba84-3221ed23d537",
+        "case_id": "demo-latest",
+        "field_code": "hinh_thuc_so_huu_nha",
+        "original_value": "Nhà riêng (sở hữu)",
+        "current_value": "Nhà riêng (sở hữu)",
+        "sources": [
+          {
+            "ocr_block_id": "ef567046-43d0-4807-852d-85e3887f9458",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.3246640374086943,
+            "bbox_y": 0.11687850338260883,
+            "bbox_width": 0.1777625472071822,
+            "bbox_height": 0.017126834158502968
+          }
+        ]
+      },
+      {
+        "id": "b66d4bb6-3a30-40d5-9cc4-c984551230dc",
+        "case_id": "demo-latest",
+        "field_code": "ho_ten",
+        "original_value": "TRẦN XUÂN HÀ",
+        "current_value": "TRẦN XUÂN HÀ",
+        "sources": [
+          {
+            "ocr_block_id": "14cfad13-ed0c-4bb4-89aa-e2ce1c1bcfc0",
+            "document_id": "20d90559-441e-44a7-a9c3-7e864edb5a75",
+            "page_number": 1,
+            "bbox_x": 0.290625,
+            "bbox_y": 0.5376712328767124,
+            "bbox_width": 0.28541666666666665,
+            "bbox_height": 0.07363013698630137
+          }
+        ]
+      },
+      {
+        "id": "6431a054-95da-4959-ba6d-f86510f3fe43",
+        "case_id": "demo-latest",
+        "field_code": "ky_han_vay",
+        "original_value": "36 tháng",
+        "current_value": "36 tháng",
+        "sources": [
+          {
+            "ocr_block_id": "220d6b10-f10e-4532-a633-704dad2083f0",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.4679526293912005,
+            "bbox_y": 0.370892322314173,
+            "bbox_width": 0.10616198058776716,
+            "bbox_height": 0.017050087261990143
+          }
+        ]
+      },
+      {
+        "id": "50e7a3a7-1dc3-4e23-bffd-7651682ace77",
+        "case_id": "demo-latest",
+        "field_code": "loai_hop_dong_lao_dong",
+        "original_value": "Không xác định thời hạn",
+        "current_value": "Không xác định thời hạn",
+        "sources": [
+          {
+            "ocr_block_id": "a64be855-bac8-4683-8559-a6bfbbbd58e9",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.5361546841248863,
+            "bbox_y": 0.8881241105014885,
+            "bbox_width": 0.23005629778450432,
+            "bbox_height": 0.017169364288300626
+          }
+        ]
+      },
+      {
+        "id": "04664d96-66a0-4cf6-8e19-4b578802d35b",
+        "case_id": "demo-latest",
+        "field_code": "loai_tai_khoan_nhan_giai_ngan",
+        "original_value": null,
+        "current_value": null,
+        "sources": []
+      },
+      {
+        "id": "4ab2b9b6-87fd-4aee-8651-768b8979a4f3",
+        "case_id": "demo-latest",
+        "field_code": "ma_so_thue_cong_ty",
+        "original_value": "0000000001",
+        "current_value": "0000000001",
+        "sources": [
+          {
+            "ocr_block_id": "b173fffa-ea91-4351-ae3d-0d6c1b5e014a",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.5311505229649841,
+            "bbox_y": 0.5540714515609914,
+            "bbox_width": 0.2294224647567076,
+            "bbox_height": 0.02413904087544255
+          }
+        ]
+      },
+      {
+        "id": "d8997b83-e5ab-40f9-aca7-221d272a30c4",
+        "case_id": "demo-latest",
+        "field_code": "muc_dich_vay",
+        "original_value": "[\"Sửa nhà\"]",
+        "current_value": "[\"Sửa nhà\"]",
+        "sources": [
+          {
+            "ocr_block_id": "3997e430-0c1d-4ed1-8e32-043b0852a0aa",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.5714089123429684,
+            "bbox_y": 0.39591012326222913,
+            "bbox_width": 0.11746233861627442,
+            "bbox_height": 0.01708198581401371
+          }
+        ]
+      },
+      {
+        "id": "d0832cdf-a27e-4304-ad82-6f1adccc9c3d",
+        "case_id": "demo-latest",
+        "field_code": "muc_luong_gross",
+        "original_value": "40.000.000",
+        "current_value": "40.000.000",
+        "sources": [
+          {
+            "ocr_block_id": "ae04f6f1-3d0c-4a0a-bb55-fbfe7e2c2827",
+            "document_id": "9a22e59e-e97e-4be9-a3cc-2a11880bab93",
+            "page_number": 1,
+            "bbox_x": 0.09354382657869934,
+            "bbox_y": 0.7476775049767751,
+            "bbox_width": 0.43355325164938735,
+            "bbox_height": 0.024386197743861977
+          }
+        ]
+      },
+      {
+        "id": "2ce52ad0-b324-4150-a315-dc23d9632914",
+        "case_id": "demo-latest",
+        "field_code": "ngan_hang_nhan_giai_ngan",
+        "original_value": "Vietcombank",
+        "current_value": "Vietcombank",
+        "sources": [
+          {
+            "ocr_block_id": "2609a9d6-b29a-4b8d-8c64-a91f24b641c8",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.08935879945429741,
+            "bbox_y": 0.5865200764818356,
+            "bbox_width": 0.14733969986357434,
+            "bbox_height": 0.02278521351179095
+          }
+        ]
+      },
+      {
+        "id": "008e087c-bc0c-4e1d-ab10-bf7bb341aa18",
+        "case_id": "demo-latest",
+        "field_code": "ngay_bat_dau_lam_viec",
+        "original_value": "01/06/2021",
+        "current_value": "01/06/2021",
+        "sources": [
+          {
+            "ocr_block_id": "bc641b7c-9a73-470a-996c-27a5e6f0d55c",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 3,
+            "bbox_x": 0.08594815825375171,
+            "bbox_y": 0.06130268199233716,
+            "bbox_width": 0.23578899499772624,
+            "bbox_height": 0.032567049808429116
+          }
+        ]
+      },
+      {
+        "id": "3b85a080-e5ff-4c16-b3e7-cc48e81f35cc",
+        "case_id": "demo-latest",
+        "field_code": "ngay_cap_cccd",
+        "original_value": "01/05/2021",
+        "current_value": "01/05/2021",
+        "sources": [
+          {
+            "ocr_block_id": "d239fa65-a8ca-4e60-bbe6-bb97cd3c2f75",
+            "document_id": "8d7bfa9c-108c-49d7-a81b-94bb3e3e30cd",
+            "page_number": 1,
+            "bbox_x": 0.04526748971193416,
+            "bbox_y": 0.15333333333333332,
+            "bbox_width": 0.49382716049382713,
+            "bbox_height": 0.04833333333333333
+          }
+        ]
+      },
+      {
+        "id": "a7e92ab2-8247-4bb5-87c4-5fb6c7a4733e",
+        "case_id": "demo-latest",
+        "field_code": "ngay_lam_don",
+        "original_value": "02/08/2026",
+        "current_value": "02/08/2026",
+        "sources": [
+          {
+            "ocr_block_id": "d1a1db8f-1c4e-4f2c-8dd7-2fc9adea325c",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.5220554797635288,
+            "bbox_y": 0.27182919056724025,
+            "bbox_width": 0.22078217371532516,
+            "bbox_height": 0.028362014021669855
+          }
+        ]
+      },
+      {
+        "id": "0184e019-267f-4b21-a472-13551b1c1823",
+        "case_id": "demo-latest",
+        "field_code": "ngay_nhan_luong_hang_thang",
+        "original_value": "ngay 02 hang tháng",
+        "current_value": "ngay 02 hang tháng",
+        "sources": [
+          {
+            "ocr_block_id": "bf1bd2b5-fb0c-4897-a45c-97b10a981019",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 3,
+            "bbox_x": 0.516143701682583,
+            "bbox_y": 0.0603448275862069,
+            "bbox_width": 0.27262391996361984,
+            "bbox_height": 0.031449553001277136
+          }
+        ]
+      },
+      {
+        "id": "42ecb774-2e6f-4d5a-b2a7-2eab9c943fa7",
+        "case_id": "demo-latest",
+        "field_code": "ngay_sinh",
+        "original_value": "20/12/1968",
+        "current_value": "20/12/1968",
+        "sources": [
+          {
+            "ocr_block_id": "43d4ff3c-cd91-49c6-a5a1-eda6f34ea3ef",
+            "document_id": "20d90559-441e-44a7-a9c3-7e864edb5a75",
+            "page_number": 1,
+            "bbox_x": 0.5875,
+            "bbox_y": 0.6232876712328768,
+            "bbox_width": 0.16458333333333333,
+            "bbox_height": 0.0547945205479452
+          }
+        ]
+      },
+      {
+        "id": "4382f24b-ea67-4aac-a485-b935c187588a",
+        "case_id": "demo-latest",
+        "field_code": "nghe_nghiep_chuyen_mon",
+        "original_value": "Chuyên Viên Phân Tích",
+        "current_value": "Chuyên Viên Phân Tích",
+        "sources": [
+          {
+            "ocr_block_id": "7873b264-f464-44eb-b620-20aa7ab9337e",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.08162801273306049,
+            "bbox_y": 0.5531058899259736,
+            "bbox_width": 0.35152341973624374,
+            "bbox_height": 0.028162214354682975
+          }
+        ]
+      },
+      {
+        "id": "1496c23c-38e2-4a7f-9429-ab49c393f6be",
+        "case_id": "demo-latest",
+        "field_code": "phuong_thuc_giai_ngan",
+        "original_value": "Chuyển khoản vào tài khoản đang sử dụng",
+        "current_value": "Chuyển khoản vào tài khoản đang sử dụng",
+        "sources": [
+          {
+            "ocr_block_id": "85a885c9-0ecf-4650-95b2-232cf1161d5d",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.2725177260082708,
+            "bbox_y": 0.5100925073568953,
+            "bbox_width": 0.35682678916552985,
+            "bbox_height": 0.017633830764021696
+          }
+        ]
+      },
+      {
+        "id": "35cb43c4-c87d-44bd-b434-8ea29edc2fa3",
+        "case_id": "demo-latest",
+        "field_code": "so_cccd",
+        "original_value": "001068026569",
+        "current_value": "001068026569",
+        "sources": [
+          {
+            "ocr_block_id": "d4952a0b-24e1-49dc-bbb0-37ccb7ef02ae",
+            "document_id": "20d90559-441e-44a7-a9c3-7e864edb5a75",
+            "page_number": 1,
+            "bbox_x": 0.296875,
+            "bbox_y": 0.4126712328767123,
+            "bbox_width": 0.4395833333333333,
+            "bbox_height": 0.07363013698630137
+          }
+        ]
+      },
+      {
+        "id": "0d57bac1-6829-4e6a-9720-271b7453bacb",
+        "case_id": "demo-latest",
+        "field_code": "so_dien_thoai_di_dong",
+        "original_value": "0904011004",
+        "current_value": "0904011004",
+        "sources": [
+          {
+            "ocr_block_id": "89598bba-ce3c-4fff-8f7d-0ab5323868e1",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.5325147794452023,
+            "bbox_y": 0.8072020395156151,
+            "bbox_width": 0.22373806275579808,
+            "bbox_height": 0.02517527087316762
+          }
+        ]
+      },
+      {
+        "id": "cb6617d3-4739-4b1c-810d-592598bda847",
+        "case_id": "demo-latest",
+        "field_code": "so_nguoi_phu_thuoc",
+        "original_value": "2",
+        "current_value": "2",
+        "sources": [
+          {
+            "ocr_block_id": "f7b8ecd9-637e-49f1-934f-0d4719a0d5ba",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 3,
+            "bbox_x": 0.10413824465666212,
+            "bbox_y": 0.33860153256704983,
+            "bbox_width": 0.026830377444292862,
+            "bbox_height": 0.020753512132822477
+          }
+        ]
+      },
+      {
+        "id": "bf8bbfb3-823b-441f-8e6c-9324ee483d26",
+        "case_id": "demo-latest",
+        "field_code": "so_tai_khoan_nhan_giai_ngan",
+        "original_value": "001100124567",
+        "current_value": "001100124567",
+        "sources": [
+          {
+            "ocr_block_id": "9fa9124d-ae8f-47ed-96e0-e578946ad764",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.668030923146885,
+            "bbox_y": 0.5822179732313576,
+            "bbox_width": 0.24579354251932697,
+            "bbox_height": 0.02517527087316762
+          }
+        ]
+      },
+      {
+        "id": "8536c24e-e38e-41a7-8fdb-c599b03cd507",
+        "case_id": "demo-latest",
+        "field_code": "so_tien_vay_de_nghi",
+        "original_value": "100.000.000",
+        "current_value": "100.000.000",
+        "sources": [
+          {
+            "ocr_block_id": "cfc2a04b-49f5-4ef2-a5c2-2d5d4062d41d",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.07412460209185993,
+            "bbox_y": 0.2748565965583174,
+            "bbox_width": 0.17462482946793997,
+            "bbox_height": 0.024219247928616953
+          }
+        ]
+      },
+      {
+        "id": "3ec908fa-9dfb-4a94-be4b-e3ed6ef2a9f3",
+        "case_id": "demo-latest",
+        "field_code": "so_tien_vay_de_nghi_bang_chu",
+        "original_value": "một trăm triều đồng",
+        "current_value": "một trăm triều đồng",
+        "sources": [
+          {
+            "ocr_block_id": "958c09d8-d416-48c9-9120-248041b8847c",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.0802637562528422,
+            "bbox_y": 0.3186743148502231,
+            "bbox_width": 0.334924965893588,
+            "bbox_height": 0.03234544295729764
+          }
+        ]
+      },
+      {
+        "id": "b0a14a04-898d-4624-b538-1c8677158760",
+        "case_id": "demo-latest",
+        "field_code": "ten_chu_tai_khoan_nhan_giai_ngan",
+        "original_value": "Trần Xuân Ha",
+        "current_value": "Trần Xuân Ha",
+        "sources": [
+          {
+            "ocr_block_id": "592c9bfb-4c05-4ad3-ab89-4b5bbfacdfab",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 1,
+            "bbox_x": 0.08935879945429741,
+            "bbox_y": 0.6333652007648184,
+            "bbox_width": 0.17849022282855845,
+            "bbox_height": 0.022944550669216062
+          }
+        ]
+      },
+      {
+        "id": "9faae6d1-eac7-4e7e-9b13-2a27ebb76e5c",
+        "case_id": "demo-latest",
+        "field_code": "ten_don_vi_cong_tac",
+        "original_value": "Công Ty TN HH Công Nghệ Anh Dưởng",
+        "current_value": "Công Ty TN HH Công Nghệ Anh Dưởng",
+        "sources": [
+          {
+            "ocr_block_id": "d86e52d6-d299-460a-b9a9-b3dba5ab626a",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.09072305593451568,
+            "bbox_y": 0.6052462182169295,
+            "bbox_width": 0.5343337880854934,
+            "bbox_height": 0.024943675571290635
+          }
+        ]
+      },
+      {
+        "id": "19e726c7-4b07-4cd3-89eb-91f3abf2ac60",
+        "case_id": "demo-latest",
+        "field_code": "thoi_gian_cu_tru_hien_tai",
+        "original_value": "20",
+        "current_value": "20",
+        "sources": [
+          {
+            "ocr_block_id": "a39a5e11-88f1-4e42-9e1f-89096f053065",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.11914506593906321,
+            "bbox_y": 0.4750563244287094,
+            "bbox_width": 0.0504774897680764,
+            "bbox_height": 0.02188606372706791
+          }
+        ]
+      },
+      {
+        "id": "1386b8d0-d779-455d-8575-99553aec5fd0",
+        "case_id": "demo-latest",
+        "field_code": "thu_nhap_thuc_lanh_hang_thang",
+        "original_value": "33.000.000",
+        "current_value": "33.000.000",
+        "sources": [
+          {
+            "ocr_block_id": "def03085-1d9d-49ab-84b3-5beb77157261",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 3,
+            "bbox_x": 0.11755343337880855,
+            "bbox_y": 0.2624521072796935,
+            "bbox_width": 0.15779899954524784,
+            "bbox_height": 0.018837803320561942
+          }
+        ]
+      },
+      {
+        "id": "97e4bd4f-00fa-4c06-b1eb-3a9a5f3bff27",
+        "case_id": "demo-latest",
+        "field_code": "tinh_trang_hon_nhan",
+        "original_value": "Độc thân",
+        "current_value": "Độc thân",
+        "sources": [
+          {
+            "ocr_block_id": "539bf19e-1ce4-428c-87ab-50591346b401",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.2480386870186022,
+            "bbox_y": 0.038920392397710814,
+            "bbox_width": 0.10550250113688042,
+            "bbox_height": 0.01687845525382453
+          }
+        ]
+      },
+      {
+        "id": "c1cda752-b172-432b-b1ab-206c9d1a9ffc",
+        "case_id": "demo-latest",
+        "field_code": "trinh_do_hoc_van",
+        "original_value": "Đại học",
+        "current_value": "Đại học",
+        "sources": [
+          {
+            "ocr_block_id": "802e393e-f1cd-435c-a024-4772b1a8fb76",
+            "document_id": "5b2d8998-cae5-4342-a875-5924f5b58385",
+            "page_number": 2,
+            "bbox_x": 0.07147386801573513,
+            "bbox_y": 0.09062770896300189,
+            "bbox_width": 0.10008636655022524,
+            "bbox_height": 0.016878361942916198
+          }
+        ]
+      }
+    ]
+  },
+  "documents": {
+    "8d7bfa9c-108c-49d7-a81b-94bb3e3e30cd": "/demo-documents/cccd_back.pdf",
+    "20d90559-441e-44a7-a9c3-7e864edb5a75": "/demo-documents/cccd_front.pdf",
+    "9a22e59e-e97e-4be9-a3cc-2a11880bab93": "/demo-documents/labor_contract.pdf",
+    "5b2d8998-cae5-4342-a875-5924f5b58385": "/demo-documents/loan_application.pdf"
+  }
+}

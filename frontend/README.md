@@ -1,32 +1,51 @@
-# React + TypeScript + Vite
+# Smart Sotek IDP Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Frontend cho luồng Upload → OCR/LLM processing → Review → lưu hồ sơ của Smart
+Sotek IDP. Ứng dụng được xây dựng bằng Vite, React, TypeScript và PDF.js.
 
-Currently, two official plugins are available:
+## Chức năng
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Tạo hồ sơ và tải lên bốn loại tài liệu bắt buộc.
+- Theo dõi trạng thái xử lý nền và hiển thị lỗi rõ ràng.
+- Hiển thị danh sách trường dữ liệu do OCR/LLM trích xuất.
+- Mở đúng tài liệu, trang và vùng bằng chứng khi chọn một trường.
+- Cho phép chuyên viên sửa giá trị và lưu hồ sơ sau khi kiểm tra.
 
-## React Compiler
+## Phát triển local
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+npm ci
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Frontend mặc định kết nối tới `http://127.0.0.1:8000`. Để dùng backend khác,
+đặt biến môi trường trước khi chạy hoặc build:
+
+```powershell
+$env:VITE_API_BASE_URL="https://api.example.com"
+npm run dev
+```
+
+## Kiểm tra
+
+```powershell
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+```
+
+## Cấu trúc
+
+```text
+src/api/          REST API client
+src/components/   Viewer, field list và field editor
+src/pages/        Upload và Review workflows
+src/types/        Kiểu dữ liệu dùng chung với backend API
+```
+
+Production frontend: https://smart-sotek-ocr-frontend.vercel.app
+
+Ứng dụng production cần `VITE_API_BASE_URL` trỏ tới một backend công khai để
+thực hiện upload và xử lý OCR. Xem [README của repository](../README.md) để biết
+kiến trúc và hướng dẫn backend.

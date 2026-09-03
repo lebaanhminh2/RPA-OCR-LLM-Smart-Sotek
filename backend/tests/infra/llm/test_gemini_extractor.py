@@ -89,15 +89,30 @@ def _documents() -> list[LLMDocumentInput]:
 
 def _address_document() -> LLMDocumentInput:
     address_parts = [
+        ("header-permanent", "3.1. Địa chỉ thường trú", 0.04, 0.20),
+        ("label-p-street", "Số nhà, tên đường/thôn/xóm", 0.05, 0.23),
+        ("source-street", "Số 6, ngõ 5 Van Phúc", 0.08, 0.255),
+        ("label-p-ward", "Phường/Xã", 0.05, 0.28),
+        ("label-p-district", "Quận/Huyện", 0.36, 0.28),
+        ("label-p-city", "Tỉnh/Thành phố", 0.66, 0.28),
+        ("source-ward", "Kim Mã", 0.08, 0.305),
+        ("source-district", "Ba dinh", 0.38, 0.305),
+        ("source-city", "Hà Nội", 0.68, 0.305),
+        ("header-current", "3.2. Địa chỉ nơi ở hiện tại", 0.04, 0.34),
+        ("label-c-street", "Số nhà, tên đường/thôn/xóm", 0.05, 0.37),
+        ("source-current-street", "Số 8 Kim Mã", 0.08, 0.395),
+        ("label-c-ward", "Phường/Xã", 0.05, 0.42),
+        ("label-c-district", "Quận/Huyện", 0.36, 0.42),
+        ("label-c-city", "Tỉnh/Thành phố", 0.66, 0.42),
+        ("source-current-ward", "Kim Mã", 0.08, 0.445),
+        ("source-current-district", "Ba dinh", 0.38, 0.445),
+        ("source-current-city", "Hà Nội", 0.68, 0.445),
         (
-            "source-street",
-            "Số 6, ngõ 5 Van Phúc",
-            0.08,
-            0.26,
+            "current-end",
+            "Thời gian cư trú tại địa chỉ hiện tại (năm)",
+            0.05,
+            0.48,
         ),
-        ("source-ward", "Kim Mã", 0.08, 0.31),
-        ("source-district", "Ba dinh", 0.38, 0.31),
-        ("source-city", "Hà Nội", 0.68, 0.31),
     ]
     return LLMDocumentInput(
         document_id="document-loan-address",
@@ -111,7 +126,7 @@ def _address_document() -> LLMDocumentInput:
                 bbox_x=bbox_x,
                 bbox_y=bbox_y,
                 bbox_width=0.2,
-                bbox_height=0.03,
+                bbox_height=0.015,
                 confidence=0.9,
                 created_at=datetime(2026, 9, 3, tzinfo=UTC),
             )
@@ -231,13 +246,18 @@ def test_prompt_requires_complete_address_and_verbatim_text() -> None:
     call = generate_content.calls[0]
     prompt = json.loads(cast(str, call["contents"]))
     blocks = prompt["documents"][0]["blocks"]
-    assert [block["source_id"] for block in blocks] == source_ids
-    assert [block["text"] for block in blocks] == [
+    blocks_by_id = {block["source_id"]: block for block in blocks}
+    assert [blocks_by_id[source_id]["text"] for source_id in source_ids] == [
         "Số 6, ngõ 5 Van Phúc",
         "Kim Mã",
         "Ba dinh",
         "Hà Nội",
     ]
+    assert prompt["address_evidence_scopes"]["dia_chi_thuong_tru"] == {
+        "document_id": "document-loan-address",
+        "page_number": 2,
+        "required_value_source_ids": source_ids,
+    }
 
     config = cast(types.GenerateContentConfig, call["config"])
     instruction = cast(str, config.system_instruction)

@@ -16,6 +16,11 @@ from app.domain.ports.llm_provider import (
     LLMExtractedField,
     LLMProvider,
 )
+from app.infra.llm.address_grounding import (
+    AddressEvidenceScope,
+    build_loan_address_scopes,
+    ground_address_sources,
+)
 
 GEMINI_MODEL = "gemini-3.5-flash-lite"
 
@@ -50,6 +55,9 @@ Quy tắc bắt buộc:
   quận/huyện, tỉnh/thành phố. Không bỏ thành phần đã có OCR evidence và
   source_ids phải chứa mọi OCR block đóng góp vào giá trị, không chứa block chỉ
   có nhãn. Giữ nguyên text của từng thành phần và không suy diễn ô còn trống.
+- Khi address_evidence_scopes có field tương ứng, nếu lấy địa chỉ từ document
+  được chỉ định thì phải dùng đủ và chỉ dùng required_value_source_ids theo
+  đúng thứ tự. Không thay source bằng block có cùng text ở section khác.
 - Ngoài hai ngoại lệ tiền và email, không chuẩn hoá field hoặc suy diễn ngoài
   nội dung tài liệu.
 """.strip()
@@ -149,7 +157,8 @@ class GeminiExtractor(LLMProvider):
         documents: list[LLMDocumentInput],
     ) -> list[LLMExtractedField]:
         self._validate_documents(documents)
-        prompt = self._build_prompt(documents)
+        address_scopes = build_loan_address_scopes(documents)
+        prompt = self._build_prompt(documents, address_scopes)
         response = self._generate_with_retry(prompt)
 
         if not response.text:
@@ -161,7 +170,7 @@ class GeminiExtractor(LLMProvider):
             raise GeminiResponseError("Gemini returned an invalid response") from exc
 
         fields_by_code = {field.field_code: field for field in parsed.fields}
-        return [
+        fields = [
             LLMExtractedField(
                 field_code=field_code,
                 value=fields_by_code[field_code].value,
@@ -169,6 +178,7 @@ class GeminiExtractor(LLMProvider):
             )
             for field_code in MVP_FIELD_CODES
         ]
+        return ground_address_sources(fields, documents, address_scopes)
 
     def _generate_with_retry(self, prompt: str) -> types.GenerateContentResponse:
         config = types.GenerateContentConfig(
@@ -219,7 +229,10 @@ class GeminiExtractor(LLMProvider):
                 source_ids.add(block.id)
 
     @staticmethod
-    def _build_prompt(documents: list[LLMDocumentInput]) -> str:
+    def _build_prompt(
+        documents: list[LLMDocumentInput],
+        address_scopes: dict[str, AddressEvidenceScope],
+    ) -> str:
         payload = {
             "required_field_codes": list(MVP_FIELD_CODES),
             "field_source_rules": {
@@ -234,6 +247,14 @@ class GeminiExtractor(LLMProvider):
                     )
                 ]
                 for field_code, constraints in MVP_FIELD_SOURCE_RULES.items()
+            },
+            "address_evidence_scopes": {
+                field_code: {
+                    "document_id": scope.document_id,
+                    "page_number": scope.page_number,
+                    "required_value_source_ids": list(scope.source_ids),
+                }
+                for field_code, scope in address_scopes.items()
             },
             "documents": [
                 {

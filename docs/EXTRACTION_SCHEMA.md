@@ -62,6 +62,12 @@
   giá trị và không chứa block chỉ có nhãn biểu mẫu. Mỗi thành phần phải giữ
   nguyên text OCR; quy tắc này chỉ ghép các thành phần có sẵn, không tách địa
   chỉ thành field mới và không suy diễn thành phần còn thiếu.
+- Với `LOAN_APPLICATION`, evidence cho `dia_chi_thuong_tru` phải nằm trong mục
+  3.1 và evidence cho `dia_chi_hien_tai` phải nằm trong mục 3.2. Adapter xác
+  định ranh giới tương đối từ tiêu đề và nhãn của biểu mẫu, không dùng tọa độ
+  pixel cố định. OCR block có cùng text ở mục khác không phải source hợp lệ;
+  nếu không xác định được ranh giới hoặc evidence không đủ thì field để `null`
+  thay vì trộn hai hàng địa chỉ.
 
 ## 3. Core 40 field catalog
 

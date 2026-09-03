@@ -91,7 +91,7 @@ def _address_document() -> LLMDocumentInput:
     address_parts = [
         (
             "source-street",
-            "Số 6, ngõ 5 Vạn Phúc",
+            "Số 6, ngõ 5 Van Phúc",
             0.08,
             0.26,
         ),
@@ -198,7 +198,7 @@ def test_extract_uses_document_aware_prompt_and_structured_output() -> None:
     assert "nhiều cách hiểu" in cast(str, config.system_instruction)
 
 
-def test_prompt_requires_complete_address_and_generic_diacritic_repair() -> None:
+def test_prompt_requires_complete_address_and_verbatim_text() -> None:
     source_ids = [
         "source-street",
         "source-ward",
@@ -210,7 +210,7 @@ def test_prompt_requires_complete_address_and_generic_diacritic_repair() -> None
             _response_json(
                 {
                     "dia_chi_thuong_tru": (
-                        "Số 6, ngõ 5 Vạn Phúc, Kim Mã, Ba Đình, Hà Nội",
+                        "Số 6, ngõ 5 Van Phúc, Kim Mã, Ba dinh, Hà Nội",
                         source_ids,
                     )
                 }
@@ -233,7 +233,7 @@ def test_prompt_requires_complete_address_and_generic_diacritic_repair() -> None
     blocks = prompt["documents"][0]["blocks"]
     assert [block["source_id"] for block in blocks] == source_ids
     assert [block["text"] for block in blocks] == [
-        "Số 6, ngõ 5 Vạn Phúc",
+        "Số 6, ngõ 5 Van Phúc",
         "Kim Mã",
         "Ba dinh",
         "Hà Nội",
@@ -241,8 +241,10 @@ def test_prompt_requires_complete_address_and_generic_diacritic_repair() -> None
 
     config = cast(types.GenerateContentConfig, call["config"])
     instruction = cast(str, config.system_instruction)
-    assert "mọi field text" in instruction
-    assert "không hardcode tên người hoặc địa danh cụ thể" in instruction
+    assert "mọi field dựa trên TEXT" in instruction
+    assert "không sửa chính tả" in instruction
+    assert "không mở rộng chữ viết" in instruction
+    assert "Giữ nguyên lỗi OCR" in instruction
     assert "ghép đủ mọi ô có nội dung" in instruction
     assert "source_ids phải chứa mọi OCR block" in instruction
 

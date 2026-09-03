@@ -60,6 +60,21 @@ button:disabled {
   box-shadow: 0 1rem 3rem rgb(32 55 90 / 8%);
 }
 
+.demo-mode-badge {
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  color: #174a98;
+  background: #d7e7ff;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.demo-introduction {
+  max-width: 48rem;
+  margin: 1.25rem 0 0;
+  color: #536174;
+}
+
 .page-header {
   display: flex;
   align-items: center;
@@ -237,6 +252,46 @@ h1 {
   border-top: 1px solid #e5e9f0;
 }
 
+.demo-document-row {
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.7fr) auto;
+}
+
+.demo-document-detail {
+  margin: 0;
+  color: #65738a;
+}
+
+.demo-document-status {
+  min-width: 6.5rem;
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  color: #65738a;
+  background: #eef1f5;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.demo-document-status--ready {
+  color: #14633f;
+  background: #e1f4ea;
+}
+
+.demo-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  border-top: 1px solid #e5e9f0;
+  padding-top: 1.5rem;
+}
+
+.demo-actions p {
+  margin: 0;
+  color: #536174;
+}
+
 .document-info h3 {
   margin-bottom: 0.15rem;
   font-size: 1rem;
@@ -294,7 +349,8 @@ h1 {
   }
 
   .page-header,
-  .document-row {
+  .document-row,
+  .demo-actions {
     align-items: stretch;
     display: flex;
     flex-direction: column;

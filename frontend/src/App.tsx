@@ -1,6 +1,5 @@
 import { CaseUploadPage } from './pages/CaseUploadPage'
 import { ReviewPage } from './pages/ReviewPage'
-import { DEMO_CASE_ID } from './api/client'
 
 function App() {
   const requestedCaseId = new URLSearchParams(window.location.search).get(
@@ -10,12 +9,10 @@ function App() {
     requestedCaseId === null &&
     (import.meta.env.VITE_DEMO_MODE === 'true' ||
       window.location.hostname.endsWith('.vercel.app'))
-  const caseId = useHostedDemo ? DEMO_CASE_ID : requestedCaseId
-
-  return caseId === null || caseId === '' ? (
-    <CaseUploadPage />
+  return requestedCaseId === null || requestedCaseId === '' ? (
+    <CaseUploadPage isDemoMode={useHostedDemo} />
   ) : (
-    <ReviewPage caseId={caseId} />
+    <ReviewPage caseId={requestedCaseId} />
   )
 }
 

@@ -2,6 +2,13 @@ import { useEffect, useState, type ChangeEvent } from 'react'
 
 import { createCase, getCase, uploadDocument } from '../api/client'
 import type { Case, Document, DocumentType } from '../types/api'
+import {
+  DEMO_DOCUMENTS,
+  DEMO_PROCESSING_DELAY_MS,
+  getDemoReviewUrl,
+  getNextDemoStage,
+  type DemoStage,
+} from './demoWorkflow'
 
 const DOCUMENT_ROWS: ReadonlyArray<{
   label: string
@@ -49,7 +56,122 @@ function getErrorText(error: unknown): string {
   return error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định.'
 }
 
-export function CaseUploadPage() {
+type CaseUploadPageProps = {
+  isDemoMode?: boolean
+}
+
+function DemoUploadPage() {
+  const [stage, setStage] = useState<DemoStage>('empty')
+
+  function handlePrimaryAction() {
+    const nextStage = getNextDemoStage(stage)
+    setStage(nextStage)
+    if (nextStage === 'processing') {
+      window.setTimeout(() => {
+        window.location.assign(getDemoReviewUrl())
+      }, DEMO_PROCESSING_DELAY_MS)
+    }
+  }
+
+  return (
+    <main className="page-shell">
+      <section className="upload-card" aria-labelledby="demo-title">
+        <header className="page-header">
+          <div>
+            <p className="eyebrow">Smart Sotek IDP · Portfolio demo</p>
+            <h1 id="demo-title">Xử lý hồ sơ vay từ lương</h1>
+          </div>
+          <span className="demo-mode-badge">Không cần backend</span>
+        </header>
+
+        <p className="demo-introduction">
+          Trải nghiệm luồng Upload → OCR/LLM → Review bằng bộ hồ sơ mẫu đã xử
+          lý. Demo không gửi và không lưu dữ liệu; mọi chỉnh sửa được đặt lại
+          khi tải lại trang.
+        </p>
+
+        <section className="case-summary" aria-label="Hồ sơ demo">
+          <div>
+            <span>Mã hồ sơ</span>
+            <strong>DEMO-SALARY-LOAN-001</strong>
+          </div>
+          <div>
+            <span>Trạng thái</span>
+            <strong className="status-badge">
+              {stage === 'empty'
+                ? 'CHƯA CHỌN HỒ SƠ'
+                : stage === 'ready'
+                  ? 'SẴN SÀNG XỬ LÝ'
+                  : 'PROCESSING'}
+            </strong>
+          </div>
+          {stage === 'processing' ? (
+            <div className="processing-message" role="status">
+              <span className="processing-spinner" aria-hidden="true" />
+              <div>
+                <strong>Đang mô phỏng pipeline OCR và Gemini</strong>
+                <span>
+                  Phát hiện vùng chữ → nhận dạng tiếng Việt → trích xuất 40
+                  trường → map nguồn bằng chứng.
+                </span>
+              </div>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="document-list" aria-labelledby="demo-documents">
+          <h2 id="demo-documents">Bốn giấy tờ bắt buộc</h2>
+          {DEMO_DOCUMENTS.map((document) => (
+            <article
+              className="document-row demo-document-row"
+              key={document.type}
+            >
+              <div className="document-info">
+                <h3>{document.label}</h3>
+                <span>{document.type}</span>
+              </div>
+              <p className="demo-document-detail">
+                {document.pages} trang · PDF mẫu
+              </p>
+              <span
+                className={
+                  stage === 'empty'
+                    ? 'demo-document-status'
+                    : 'demo-document-status demo-document-status--ready'
+                }
+              >
+                {stage === 'empty' ? 'Chờ chọn' : 'Đã tải lên'}
+              </span>
+            </article>
+          ))}
+        </section>
+
+        <footer className="demo-actions">
+          <p>
+            {stage === 'empty'
+              ? 'Bắt đầu bằng bộ tài liệu synthetic đã chuẩn bị sẵn.'
+              : stage === 'ready'
+                ? 'Hồ sơ đã đủ giấy tờ và sẵn sàng chạy pipeline demo.'
+                : 'Sau khi xử lý, trang Review sẽ tự động mở.'}
+          </p>
+          <button
+            type="button"
+            onClick={handlePrimaryAction}
+            disabled={stage === 'processing'}
+          >
+            {stage === 'empty'
+              ? 'Sử dụng bộ hồ sơ mẫu'
+              : stage === 'ready'
+                ? 'Chạy xử lý demo'
+                : 'Đang xử lý...'}
+          </button>
+        </footer>
+      </section>
+    </main>
+  )
+}
+
+function LiveCaseUploadPage() {
   const [currentCase, setCurrentCase] = useState<Case | null>(null)
   const [isCreatingCase, setIsCreatingCase] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
@@ -323,4 +445,8 @@ export function CaseUploadPage() {
       </section>
     </main>
   )
+}
+
+export function CaseUploadPage({ isDemoMode = false }: CaseUploadPageProps) {
+  return isDemoMode ? <DemoUploadPage /> : <LiveCaseUploadPage />
 }

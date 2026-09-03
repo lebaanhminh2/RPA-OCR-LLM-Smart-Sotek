@@ -14,6 +14,7 @@ import {
   type DisplayedPageDimensions,
   type NormalizedBbox,
 } from './bboxGeometry'
+import { fitDocumentScale } from './documentSizing'
 import './DocumentViewer.css'
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl
@@ -141,16 +142,18 @@ function ZoomControls({
         onClick={() => onZoomChange(1)}
         disabled={zoom === 1}
       >
-        Zoom out
+        Thu nhỏ
       </button>
-      <span aria-live="polite">{Math.round(zoom * 100)}%</span>
+      <span aria-live="polite">
+        {zoom === 1 ? 'Vừa khung' : `${Math.round(zoom * 100)}%`}
+      </span>
       <button
         type="button"
         className="document-viewer__button"
         onClick={() => onZoomChange(1.5)}
         disabled={zoom === 1.5}
       >
-        Zoom in
+        Phóng to
       </button>
     </div>
   )
@@ -167,7 +170,9 @@ function PdfViewer({
   zoom: ZoomLevel
   onZoomChange: (zoom: ZoomLevel) => void
 }) {
+  const stageRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const stageDimensions = useDisplayedDimensions(stageRef)
   const displayedDimensions = useDisplayedDimensions(canvasRef)
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null)
   const [currentPage, setCurrentPage] = useState(pageNumber ?? 1)
@@ -227,7 +232,11 @@ function PdfViewer({
   }, [pageNumber, source])
 
   useEffect(() => {
-    if (pdfDocument === null || totalPages === 0) {
+    if (
+      pdfDocument === null ||
+      totalPages === 0 ||
+      stageDimensions.width <= 0
+    ) {
       return
     }
 
@@ -249,7 +258,14 @@ function PdfViewer({
           throw new Error('Không tìm thấy canvas để hiển thị PDF.')
         }
 
-        const viewport = page.getViewport({ scale: zoom })
+        const baseViewport = page.getViewport({ scale: 1 })
+        const viewport = page.getViewport({
+          scale: fitDocumentScale(
+            baseViewport.width,
+            stageDimensions.width,
+            zoom,
+          ),
+        })
         canvas.width = Math.ceil(viewport.width)
         canvas.height = Math.ceil(viewport.height)
 
@@ -275,15 +291,28 @@ function PdfViewer({
       isActive = false
       renderTask?.cancel()
     }
-  }, [currentPage, pdfDocument, totalPages, zoom])
+  }, [
+    currentPage,
+    pdfDocument,
+    stageDimensions.width,
+    totalPages,
+    zoom,
+  ])
 
-  const isLoading = loadState === 'loading' || isRendering
+  const stageIsMeasured = stageDimensions.width > 0
+  const isLoading =
+    loadState === 'loading' ||
+    isRendering ||
+    (loadState === 'loaded' && !stageIsMeasured)
   const showDocument =
-    loadState === 'loaded' && !isRendering && errorMessage === null
+    loadState === 'loaded' &&
+    !isRendering &&
+    errorMessage === null &&
+    stageIsMeasured
 
   return (
     <section className="document-viewer" aria-label={label}>
-      <div className="document-viewer__stage">
+      <div ref={stageRef} className="document-viewer__stage">
         {isLoading ? (
           <p className="document-viewer__message" role="status">
             Đang tải tài liệu...
@@ -352,13 +381,20 @@ function ImageViewer({
   zoom: ZoomLevel
   onZoomChange: (zoom: ZoomLevel) => void
 }) {
+  const stageRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
+  const stageDimensions = useDisplayedDimensions(stageRef)
   const displayedDimensions = useDisplayedDimensions(imageRef)
   const [imageUrl] = useState(() =>
     typeof source === 'string' ? source : URL.createObjectURL(source),
   )
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [naturalWidth, setNaturalWidth] = useState(0)
+  const displayedWidth =
+    naturalWidth > 0 && stageDimensions.width > 0
+      ? naturalWidth *
+        fitDocumentScale(naturalWidth, stageDimensions.width, zoom)
+      : null
 
   useEffect(() => {
     if (typeof source === 'string') {
@@ -370,8 +406,9 @@ function ImageViewer({
 
   return (
     <section className="document-viewer" aria-label={alt}>
-      <div className="document-viewer__stage">
-        {loadState === 'loading' ? (
+      <div ref={stageRef} className="document-viewer__stage">
+        {loadState === 'loading' ||
+        (loadState === 'loaded' && displayedWidth === null) ? (
           <p className="document-viewer__message" role="status">
             Đang tải tài liệu...
           </p>
@@ -387,9 +424,11 @@ function ImageViewer({
             className="document-viewer__image"
             src={imageUrl}
             alt={alt}
-            hidden={loadState !== 'loaded'}
+            hidden={loadState !== 'loaded' || displayedWidth === null}
             style={
-              naturalWidth > 0 ? { width: `${naturalWidth * zoom}px` } : undefined
+              displayedWidth === null
+                ? undefined
+                : { width: `${displayedWidth}px` }
             }
             onLoad={(event) => {
               setNaturalWidth(event.currentTarget.naturalWidth)
@@ -397,7 +436,7 @@ function ImageViewer({
             }}
             onError={() => setLoadState('error')}
           />
-          {loadState === 'loaded' ? (
+          {loadState === 'loaded' && displayedWidth !== null ? (
             <HighlightOverlays
               highlights={highlights}
               dimensions={displayedDimensions}
